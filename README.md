@@ -30,7 +30,7 @@ Then run:
 bundle install
 
 # Run the plugin installer to set up kamal dev commands
-bundle exec kamal-dev-plugin
+bundle exec plugin-kamal-dev
 ```
 
 The plugin installer will:
@@ -226,7 +226,7 @@ echo $GITHUB_TOKEN_B64 | base64 -d  # Decode if needed
 
 ## Commands Reference
 
-All commands below assume you've run `bundle exec kamal-dev-plugin` as described in the Installation section. If you're using an alternative setup method, adjust the commands accordingly (see Alternative Setup Methods in Installation).
+All commands below assume you've run `bundle exec plugin-kamal-dev` as described in the Installation section. If you're using an alternative setup method, adjust the commands accordingly (see Alternative Setup Methods in Installation).
 
 ### deploy
 
