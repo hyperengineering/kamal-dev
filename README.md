@@ -33,12 +33,20 @@ bundle install
 bundle exec plugin-kamal-dev
 ```
 
-The plugin installer will:
-- Generate `bin/kamal` binstub if it doesn't exist
-- Patch the binstub to load kamal-dev automatically
-- Make `bin/kamal dev` commands available
+The installer will ask which method you prefer:
 
-**That's it!** You can now use `bin/kamal dev deploy`, `bin/kamal dev list`, etc.
+**Option 1 (Recommended): Patch gem executable**
+- Patches the global `kamal` executable installed with the gem
+- Creates a backup (`kamal.backup`) before patching
+- Works with `kamal dev` and `bundle exec kamal dev`
+- Global installation (available in all projects)
+
+**Option 2: Create project binstub**
+- Creates `bin/kamal` in your project directory
+- Local to your project only
+- Use with `bin/kamal dev`
+
+**That's it!** After installation, you can use kamal dev commands.
 
 ### Alternative Setup Methods
 
@@ -117,13 +125,18 @@ export GITHUB_TOKEN="ghp_..."
 **3. Deploy workspaces:**
 
 ```bash
+# If you chose Option 1 (gem executable):
+kamal dev deploy --count 3
+# or: bundle exec kamal dev deploy --count 3
+
+# If you chose Option 2 (binstub):
 bin/kamal dev deploy --count 3
 ```
 
 **4. List running workspaces:**
 
 ```bash
-bin/kamal dev list
+kamal dev list
 
 # Output:
 # NAME          IP            STATUS   DEPLOYED AT
@@ -135,8 +148,8 @@ bin/kamal dev list
 **5. Stop/remove when done:**
 
 ```bash
-bin/kamal dev stop --all     # Stop containers, keep VMs
-bin/kamal dev remove --all   # Destroy VMs, cleanup state
+kamal dev stop --all     # Stop containers, keep VMs
+kamal dev remove --all   # Destroy VMs, cleanup state
 ```
 
 ## Configuration

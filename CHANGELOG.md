@@ -1,5 +1,20 @@
 ## [Unreleased]
 
+## [0.1.3] - 2025-11-16
+
+### Added
+- **Interactive Installation Mode Selection**: `plugin-kamal-dev` now prompts user to choose installation method
+  - Option 1: Patch gem-installed kamal executable (global, works with `kamal dev` and `bundle exec kamal dev`)
+  - Option 2: Create project binstub `bin/kamal` (local, use `bin/kamal dev`)
+  - Default: Option 1 (gem executable patching)
+- **Automatic Backup**: Creates `.backup` file before patching gem executable
+- **Smart Executable Discovery**: Finds kamal executable via `bundle exec which`, `which`, or gem environment
+
+### Changed
+- Installer now defaults to patching gem executable instead of creating binstub
+- Success messages updated based on chosen installation mode
+- Better user guidance on how to use kamal dev after installation
+
 ## [0.1.2] - 2025-11-16
 
 ### Added
