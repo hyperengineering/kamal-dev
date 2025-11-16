@@ -1,0 +1,18 @@
+service: kamal-dev-test
+image: spec/fixtures/integration/devcontainer.json
+
+provider:
+  type: upcloud
+  zone: us-nyc1
+  plan: 1xCPU-1GB
+
+defaults:
+  cpus: 1
+  memory: 1g
+
+vms:
+  count: 2
+  spread: false
+
+naming:
+  pattern: "{service}-{index}"

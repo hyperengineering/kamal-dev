@@ -1,0 +1,5 @@
+{
+  "image": "ruby:3.2",
+  "forwardPorts": [3000, 5432],
+  "workspaceFolder": "/workspace"
+}

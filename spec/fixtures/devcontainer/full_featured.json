@@ -1,0 +1,23 @@
+{
+  "image": "mcr.microsoft.com/devcontainers/ruby:3.2",
+  "forwardPorts": [3000, 5432, 6379],
+  "mounts": [
+    {
+      "source": "${localWorkspaceFolder}",
+      "target": "/workspace",
+      "type": "bind"
+    },
+    {
+      "source": "gem-cache",
+      "target": "/usr/local/bundle",
+      "type": "volume"
+    }
+  ],
+  "containerEnv": {
+    "RAILS_ENV": "development",
+    "DATABASE_URL": "postgres://postgres@db:5432/app_development"
+  },
+  "runArgs": ["--cpus=2", "--memory=4g"],
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspace"
+}

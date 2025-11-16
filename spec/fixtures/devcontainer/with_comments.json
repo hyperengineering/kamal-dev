@@ -1,0 +1,10 @@
+{
+  // This is a comment
+  "image": "ruby:3.2",
+  "forwardPorts": [3000], // Rails server
+  /* Multi-line
+     comment */
+  "containerEnv": {
+    "RAILS_ENV": "development"
+  }
+}

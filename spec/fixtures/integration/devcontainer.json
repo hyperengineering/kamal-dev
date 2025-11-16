@@ -1,0 +1,33 @@
+{
+  // Simple test devcontainer for integration testing
+  "name": "Kamal Dev Test Container",
+  "image": "ruby:3.2-slim",
+
+  // Forward port 3000 for testing
+  "forwardPorts": [3000],
+
+  // Test environment variables
+  "containerEnv": {
+    "RAILS_ENV": "test",
+    "TEST_VAR": "integration_test"
+  },
+
+  // Workspace configuration
+  "workspaceFolder": "/workspace",
+  "remoteUser": "root",
+
+  // Resource limits for testing (minimal)
+  "runArgs": [
+    "--cpus=1",
+    "--memory=1g"
+  ],
+
+  // Volume mount for testing
+  "mounts": [
+    {
+      "source": "kamal-dev-test-cache",
+      "target": "/cache",
+      "type": "volume"
+    }
+  ]
+}
