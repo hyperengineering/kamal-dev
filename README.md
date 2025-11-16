@@ -19,15 +19,18 @@ Kamal::Dev extends [Kamal](https://github.com/basecamp/kamal) to deploy and mana
 
 Add to your application's Gemfile:
 
-```bash
-bundle add kamal-dev
+```ruby
+gem "kamal", "~> 2.0"
+gem "kamal-dev"
 ```
 
-Or install manually:
+Then run:
 
 ```bash
-gem install kamal-dev
+bundle install
 ```
+
+The `kamal dev` subcommand will be automatically available when both gems are installed. Kamal::Dev hooks into the main Kamal CLI and registers the `dev` namespace.
 
 ## Quick Start
 

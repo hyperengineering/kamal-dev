@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+
+# Development binstub for kamal-dev
+# Loads the extension and runs kamal CLI
+
+require "bundler/setup"
+require_relative "../lib/kamal/dev"
+
+# Now run kamal with the dev extension loaded
+Kamal::Cli::Main.start(ARGV)
