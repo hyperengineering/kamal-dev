@@ -3,7 +3,7 @@
 require "json"
 
 module Kamal
-  module Configuration
+  module Dev
     # Parses VS Code devcontainer.json specifications into Docker configuration
     #
     # Handles JSON with comments (// and /* */), extracts container properties,

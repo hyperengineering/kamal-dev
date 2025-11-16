@@ -5,11 +5,11 @@ require "json"
 require "yaml"
 require "sshkit"
 require "sshkit/dsl"
-require "kamal/configuration/dev_config"
-require "kamal/configuration/devcontainer_parser"
-require "kamal/configuration/devcontainer"
-require "kamal/dev/state_manager"
-require "kamal/providers/upcloud"
+require_relative "../dev/config"
+require_relative "../dev/devcontainer_parser"
+require_relative "../dev/devcontainer"
+require_relative "../dev/state_manager"
+require_relative "../providers/upcloud"
 
 # Configure SSHKit
 SSHKit.config.use_format :pretty
@@ -252,7 +252,7 @@ module Kamal
         def load_config
           @config ||= begin
             config_path = options[:config] || self.class.class_options[:config].default
-            Kamal::Configuration::DevConfig.new(config_path, validate: true)
+            Kamal::Dev::Config.new(config_path, validate: true)
           end
         end
 
@@ -346,7 +346,7 @@ module Kamal
         # Currently hardcoded to UpCloud provider. Credentials loaded from ENV variables.
         # Future enhancement will support multiple providers via factory pattern.
         #
-        # @param config [Kamal::Configuration::DevConfig] Deployment configuration
+        # @param config [Kamal::Dev::Config] Deployment configuration
         # @return [Kamal::Providers::Upcloud] UpCloud provider instance
         # @raise [RuntimeError] if UPCLOUD_USERNAME or UPCLOUD_PASSWORD not set
         #
@@ -373,7 +373,7 @@ module Kamal
         # - Cost warning message
         # - Link to provider's pricing page
         #
-        # @param config [Kamal::Configuration::DevConfig] Deployment configuration
+        # @param config [Kamal::Dev::Config] Deployment configuration
         # @param count [Integer] Number of VMs to deploy
         # @return [void]
         def show_cost_estimate(config, count)
@@ -411,7 +411,7 @@ module Kamal
         # Provisions specified number of VMs sequentially, displaying progress dots.
         # Each VM is configured with zone, plan, title, and SSH key from config.
         #
-        # @param config [Kamal::Configuration::DevConfig] Deployment configuration
+        # @param config [Kamal::Dev::Config] Deployment configuration
         # @param count [Integer] Number of VMs to provision
         # @return [Array<Hash>] Array of VM details, each containing:
         #   - :id [String] VM identifier (UUID)

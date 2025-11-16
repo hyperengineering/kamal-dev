@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe Kamal::Configuration::Devcontainer do
+RSpec.describe Kamal::Dev::Devcontainer do
   describe "#initialize" do
     it "accepts a parsed config hash" do
       config = {

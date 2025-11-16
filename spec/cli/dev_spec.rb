@@ -372,7 +372,7 @@ RSpec.describe Kamal::Cli::Dev do
 
     it "uses default SSH key path when not configured" do
       File.write(config_path, base_config.to_yaml)
-      config = Kamal::Configuration::DevConfig.new(config_path)
+      config = Kamal::Dev::Config.new(config_path)
 
       expect(config.ssh_key_path).to eq("~/.ssh/id_rsa.pub")
     end
@@ -384,7 +384,7 @@ RSpec.describe Kamal::Cli::Dev do
         }
       )
       File.write(config_path, config_with_ssh.to_yaml)
-      config = Kamal::Configuration::DevConfig.new(config_path)
+      config = Kamal::Dev::Config.new(config_path)
 
       expect(config.ssh_key_path).to eq(custom_key_path)
     end

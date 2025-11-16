@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "kamal/configuration/dev_config"
+require "kamal/dev/config"
 
-RSpec.describe Kamal::Configuration::DevConfig, "naming" do
+RSpec.describe Kamal::Dev::Config, "naming" do
   let(:base_config) do
     {
       "service" => "myapp-dev",

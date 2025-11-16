@@ -4,11 +4,11 @@ require "yaml"
 require "active_support/core_ext/hash"
 require_relative "devcontainer_parser"
 require_relative "devcontainer"
-require_relative "../dev/secrets_loader"
+require_relative "secrets_loader"
 
 module Kamal
-  module Configuration
-    class DevConfig
+  module Dev
+    class Config
       attr_reader :raw_config
 
       def initialize(config, validate: false)

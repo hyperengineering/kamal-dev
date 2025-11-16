@@ -219,7 +219,7 @@ RSpec.describe "Kamal Dev Deployment Lifecycle (Integration)", type: :integratio
     it "loads devcontainer.json and generates correct Docker config" do
       puts "\n🐳 Testing devcontainer.json parsing and Docker config generation..."
 
-      config = Kamal::Configuration::DevConfig.new(test_config_path, validate: true)
+      config = Kamal::Dev::Config.new(test_config_path, validate: true)
       devcontainer = config.devcontainer
 
       # Verify devcontainer parsed correctly

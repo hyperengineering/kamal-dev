@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe Kamal::Configuration::DevcontainerParser do
+RSpec.describe Kamal::Dev::DevcontainerParser do
   let(:fixtures_path) { File.join(__dir__, "../fixtures/devcontainer") }
 
   describe "#initialize" do
@@ -94,7 +94,7 @@ RSpec.describe Kamal::Configuration::DevcontainerParser do
 
       it "raises ValidationError" do
         expect { parser.parse }.to raise_error(
-          Kamal::Configuration::DevcontainerParser::ValidationError,
+          Kamal::Dev::DevcontainerParser::ValidationError,
           /image.*required/i
         )
       end

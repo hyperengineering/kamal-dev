@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "kamal/configuration/dev_config"
+require "kamal/dev/config"
 require "tmpdir"
 require "fileutils"
 
-RSpec.describe Kamal::Configuration::DevConfig do
+RSpec.describe Kamal::Dev::Config do
   let(:config_dir) { Dir.mktmpdir }
   let(:config_path) { File.join(config_dir, "dev.yml") }
 

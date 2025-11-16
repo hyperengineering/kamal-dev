@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Kamal
-  module Configuration
+  module Dev
     # Represents a single devcontainer instance with its parsed configuration
     #
     # Provides methods to access Docker configuration and generate Docker run commands.

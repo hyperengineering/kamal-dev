@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "kamal/configuration/dev_config"
+require "kamal/dev/config"
 
-RSpec.describe Kamal::Configuration::DevConfig, "validation" do
+RSpec.describe Kamal::Dev::Config, "validation" do
   describe "missing required fields" do
     it "raises error when service is missing" do
       config = {
