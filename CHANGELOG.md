@@ -1,5 +1,28 @@
 ## [Unreleased]
 
+## [0.1.1] - 2025-11-16
+
+### Fixed
+- **Namespace Conflict Resolution**: Refactored `Kamal::Configuration::*` to `Kamal::Dev::*` to avoid conflicts with base Kamal's Configuration class
+  - Moved `lib/kamal/configuration/dev_config.rb` → `lib/kamal/dev/config.rb`
+  - Renamed `DevConfig` → `Config` for cleaner namespace
+  - Updated all requires and class references across codebase
+  - Moved spec files to match new structure
+
+### Added
+- **CLI Integration Hook**: Seamless integration with Kamal executable
+  - Added `lib/kamal-dev.rb` stub for bundler auto-require
+  - Hook into `Kamal::Cli::Main` to register `dev` subcommand via `class_eval`
+  - Users can now run `bundle exec kamal dev deploy` directly
+  - No separate executable needed - extends existing kamal command
+- **Development Binstub**: Created `exe/kamal-dev` for local development testing
+
+### Changed
+- Updated installation instructions in README to document CLI integration
+- All 142 tests passing with new namespace structure
+
+## [0.1.0] - 2025-11-15
+
 ### Architecture
 
 #### Architectural Decision: Hybrid Kamal Integration (2025-11-16)
