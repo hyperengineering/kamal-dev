@@ -10,6 +10,7 @@ class KamalDevInstaller
   def initialize
     @patched = false
     @created_binstub = false
+    @mode = nil
   end
 
   def run
@@ -20,9 +21,17 @@ class KamalDevInstaller
       exit 1
     end
 
-    ensure_bin_directory
-    ensure_kamal_binstub
-    patch_binstub
+    # Ask user which installation method they prefer
+    choose_installation_mode
+
+    case @mode
+    when :gem
+      patch_gem_executable
+    when :binstub
+      ensure_bin_directory
+      ensure_kamal_binstub
+      patch_binstub
+    end
 
     print_success
   end
@@ -34,6 +43,89 @@ class KamalDevInstaller
     puts "🔧 Kamal Dev Installer"
     puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     puts
+  end
+
+  def choose_installation_mode
+    puts "Choose installation method:"
+    puts
+    puts "  1. Patch gem-installed kamal executable (global, works with 'kamal dev')"
+    puts "  2. Create project binstub bin/kamal (local, use 'bin/kamal dev')"
+    puts
+    print "Enter choice [1/2] (default: 1): "
+
+    choice = $stdin.gets.chomp
+    choice = "1" if choice.empty?
+
+    case choice
+    when "1"
+      @mode = :gem
+    when "2"
+      @mode = :binstub
+    else
+      error "Invalid choice. Please enter 1 or 2."
+      exit 1
+    end
+
+    puts
+  end
+
+  def patch_gem_executable
+    gem_executable = find_gem_executable
+
+    unless gem_executable
+      error "Could not find kamal executable. Make sure 'kamal' gem is installed."
+      exit 1
+    end
+
+    puts "📍 Found kamal executable: #{gem_executable}"
+    puts
+
+    if already_patched?(File.read(gem_executable))
+      puts "✓ Kamal executable already patched (kamal-dev is loaded)"
+      return
+    end
+
+    # Create backup
+    backup_path = "#{gem_executable}.backup"
+    unless File.exist?(backup_path)
+      puts "💾 Creating backup: #{backup_path}"
+      FileUtils.cp(gem_executable, backup_path)
+    else
+      puts "✓ Backup already exists: #{backup_path}"
+    end
+
+    # Patch the executable
+    puts "🔧 Patching kamal executable..."
+    content = File.read(gem_executable)
+    patched_content = insert_require(content)
+
+    if patched_content.nil?
+      error "Could not find a safe insertion point in kamal executable. Please patch manually."
+      exit 1
+    end
+
+    File.write(gem_executable, patched_content)
+    @patched = true
+    puts "✓ Patched kamal executable"
+  end
+
+  def find_gem_executable
+    # Try to find via bundle
+    kamal_path = `bundle exec which kamal 2>/dev/null`.strip
+    return kamal_path unless kamal_path.empty?
+
+    # Try via gem
+    kamal_path = `which kamal 2>/dev/null`.strip
+    return kamal_path unless kamal_path.empty?
+
+    # Try via gem environment
+    gem_bin_dir = `gem environment gemdir 2>/dev/null`.strip
+    return nil if gem_bin_dir.empty?
+
+    possible_path = File.join(gem_bin_dir.sub("/gems", "/bin"), "kamal")
+    return possible_path if File.exist?(possible_path)
+
+    nil
   end
 
   def in_project_directory?
@@ -147,16 +239,34 @@ class KamalDevInstaller
     if @created_binstub || @patched
       puts "You can now use the 'kamal dev' commands:"
       puts
-      puts "  bin/kamal dev deploy --count 3"
-      puts "  bin/kamal dev list"
-      puts "  bin/kamal dev stop --all"
-      puts "  bin/kamal dev remove --all"
-      puts
-      puts "For more information, run: bin/kamal dev help"
+
+      case @mode
+      when :gem
+        puts "  kamal dev deploy --count 3"
+        puts "  kamal dev list"
+        puts "  kamal dev stop --all"
+        puts "  kamal dev remove --all"
+        puts
+        puts "Or with bundle exec:"
+        puts "  bundle exec kamal dev deploy --count 3"
+      when :binstub
+        puts "  bin/kamal dev deploy --count 3"
+        puts "  bin/kamal dev list"
+        puts "  bin/kamal dev stop --all"
+        puts "  bin/kamal dev remove --all"
+        puts
+        puts "For more information, run: bin/kamal dev help"
+      end
     else
       puts "No changes were needed - you're already set up!"
       puts
-      puts "Use: bin/kamal dev <command>"
+
+      case @mode
+      when :gem
+        puts "Use: kamal dev <command>"
+      when :binstub
+        puts "Use: bin/kamal dev <command>"
+      end
     end
 
     puts
