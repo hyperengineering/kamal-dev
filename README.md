@@ -29,11 +29,11 @@ Then run:
 ```bash
 bundle install
 
-# Run the installer to set up kamal dev commands
-bundle exec kamal-dev-install
+# Run the plugin installer to set up kamal dev commands
+bundle exec kamal-dev-plugin
 ```
 
-The installer will:
+The plugin installer will:
 - Generate `bin/kamal` binstub if it doesn't exist
 - Patch the binstub to load kamal-dev automatically
 - Make `bin/kamal dev` commands available
@@ -226,7 +226,7 @@ echo $GITHUB_TOKEN_B64 | base64 -d  # Decode if needed
 
 ## Commands Reference
 
-All commands below assume you've run `bundle exec kamal-dev-install` as described in the Installation section. If you're using an alternative setup method, adjust the commands accordingly (see Alternative Setup Methods in Installation).
+All commands below assume you've run `bundle exec kamal-dev-plugin` as described in the Installation section. If you're using an alternative setup method, adjust the commands accordingly (see Alternative Setup Methods in Installation).
 
 ### deploy
 

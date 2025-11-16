@@ -15,8 +15,8 @@
   - Hook into `Kamal::Cli::Main` to register `dev` subcommand via `class_eval`
   - Extends existing kamal command rather than creating separate executable
   - **Note**: Kamal has no plugin system, so gem must be explicitly required
-- **Automatic Installer** (`kamal-dev-install` executable)
-  - One-command setup: `bundle exec kamal-dev-install`
+- **Automatic Installer** (`kamal-dev-plugin` executable)
+  - One-command setup: `bundle exec kamal-dev-plugin`
   - Automatically generates `bin/kamal` binstub if missing
   - Intelligently patches binstub to load kamal-dev extension
   - Idempotent - safe to run multiple times
@@ -28,7 +28,7 @@
 
 ### Changed
 - **Simplified Installation Flow**: README now features automatic installer as primary method
-  - Primary: `bundle exec kamal-dev-install` (one command, fully automated)
+  - Primary: `bundle exec kamal-dev-plugin` (one command, fully automated)
   - Alternative options available for users who prefer manual setup
   - Updated Quick Start examples to use `bin/kamal dev` commands
   - Updated Commands Reference with simpler usage patterns

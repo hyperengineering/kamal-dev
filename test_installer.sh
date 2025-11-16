@@ -30,8 +30,8 @@ echo "📦 Running bundle install..."
 bundle install --quiet
 
 # Run the installer
-echo "🔧 Running kamal-dev-install..."
-bundle exec kamal-dev-install
+echo "🔧 Running kamal-dev-plugin..."
+bundle exec kamal-dev-plugin
 
 # Verify bin/kamal exists
 if [ ! -f "bin/kamal" ]; then
@@ -51,7 +51,7 @@ echo "✓ bin/kamal contains kamal-dev require"
 
 # Run installer again to test idempotency
 echo "🔧 Running installer again (testing idempotency)..."
-bundle exec kamal-dev-install
+bundle exec kamal-dev-plugin
 
 # Verify still only one require line
 REQUIRE_COUNT=$(grep -c 'require "kamal-dev"' bin/kamal || true)
