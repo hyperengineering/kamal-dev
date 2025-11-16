@@ -15,21 +15,36 @@
   - Hook into `Kamal::Cli::Main` to register `dev` subcommand via `class_eval`
   - Extends existing kamal command rather than creating separate executable
   - **Note**: Kamal has no plugin system, so gem must be explicitly required
+- **Automatic Installer** (`kamal-dev-install` executable)
+  - One-command setup: `bundle exec kamal-dev-install`
+  - Automatically generates `bin/kamal` binstub if missing
+  - Intelligently patches binstub to load kamal-dev extension
+  - Idempotent - safe to run multiple times
+  - Three insertion strategies for maximum compatibility
+  - Clear success/error messages with usage instructions
+  - Tested with comprehensive integration test suite
+- **Reference Implementation**: `bin/kamal-template` binstub example
 - **Development Binstub**: Created `exe/kamal-dev` for local development testing
 
 ### Changed
-- **Updated Installation Documentation**: README now includes three integration options:
-  1. **Simple approach**: `bundle exec ruby -rkamal-dev -S kamal dev` (recommended for quick start)
-  2. **Custom binstub**: Edit `bin/kamal` to add `require "kamal-dev"` (recommended for regular use)
-  3. **Boot file require**: Add `require "kamal-dev"` to project initialization (e.g., Rails `config/boot.rb`)
-  - Added `bin/kamal-template` as reference implementation for custom binstub
-  - Updated Quick Start and Commands Reference sections with correct usage patterns
+- **Simplified Installation Flow**: README now features automatic installer as primary method
+  - Primary: `bundle exec kamal-dev-install` (one command, fully automated)
+  - Alternative options available for users who prefer manual setup
+  - Updated Quick Start examples to use `bin/kamal dev` commands
+  - Updated Commands Reference with simpler usage patterns
 - All 142 tests passing with new namespace structure
 
 ### Documentation
+- **Installation Guide**: Restructured with automatic installer as recommended approach
+  - Clear step-by-step installation instructions
+  - Alternative setup methods in collapsible section
+  - Examples updated to match installer output
+- **Installer Testing**: Added `test_installer.sh` for automated testing
+  - Tests binstub generation and patching
+  - Verifies idempotency
+  - Validates file content and permissions
 - Clarified that kamal-dev requires explicit loading due to lack of Kamal plugin system
 - Provided multiple integration paths for different use cases and project setups
-- Added troubleshooting guidance for CLI integration issues
 
 ## [0.1.0] - 2025-11-15
 
