@@ -30,7 +30,47 @@ Then run:
 bundle install
 ```
 
-The `kamal dev` subcommand will be automatically available when both gems are installed. Kamal::Dev hooks into the main Kamal CLI and registers the `dev` namespace.
+### Setup: Enabling the `kamal dev` subcommand
+
+Kamal doesn't have a plugin system, so kamal-dev hooks into the Kamal CLI when the gem is required. Choose one of these approaches:
+
+**Option 1: Simple (Recommended for quick start)**
+
+Use `bundle exec` with the `-r` flag to require kamal-dev:
+
+```bash
+bundle exec ruby -rkamal-dev -S kamal dev deploy
+
+# Or create a shell alias for convenience:
+alias kamal="bundle exec ruby -rkamal-dev -S kamal"
+```
+
+**Option 2: Custom binstub (Recommended for regular use)**
+
+Create a custom `bin/kamal` binstub that loads kamal-dev:
+
+```bash
+# Generate standard binstub
+bundle binstubs kamal --force
+```
+
+Then edit `bin/kamal` to add this line after the bundler setup:
+
+```ruby
+require "kamal-dev"  # Add this line to load kamal-dev extension
+```
+
+See `bin/kamal-template` in this repository for a complete example.
+
+**Option 3: Bundler auto-require**
+
+If your project has a boot/initialization file (e.g., Rails `config/boot.rb`), add:
+
+```ruby
+require "kamal-dev"
+```
+
+Then use: `bundle exec kamal dev`
 
 ## Quick Start
 
@@ -68,13 +108,17 @@ export GITHUB_TOKEN="ghp_..."
 **3. Deploy workspaces:**
 
 ```bash
-kamal dev deploy --count 3
+# Using the simple approach (Option 1):
+bundle exec ruby -rkamal-dev -S kamal dev deploy --count 3
+
+# Or if using binstub (Option 2):
+bin/kamal dev deploy --count 3
 ```
 
 **4. List running workspaces:**
 
 ```bash
-kamal dev list
+bundle exec ruby -rkamal-dev -S kamal dev list
 # Output:
 # NAME          IP            STATUS   DEPLOYED AT
 # myapp-dev-1   1.2.3.4       running  2025-11-16 10:30:00 UTC
@@ -85,8 +129,8 @@ kamal dev list
 **5. Stop/remove when done:**
 
 ```bash
-kamal dev stop --all     # Stop containers, keep VMs
-kamal dev remove --all   # Destroy VMs, cleanup state
+bundle exec ruby -rkamal-dev -S kamal dev stop --all     # Stop containers, keep VMs
+bundle exec ruby -rkamal-dev -S kamal dev remove --all   # Destroy VMs, cleanup state
 ```
 
 ## Configuration
@@ -175,6 +219,11 @@ echo $GITHUB_TOKEN_B64 | base64 -d  # Decode if needed
 ```
 
 ## Commands Reference
+
+All commands below assume you're using one of the setup methods described in Installation. For brevity, we show the short form (`kamal dev`), but remember to use your chosen approach:
+- `bundle exec ruby -rkamal-dev -S kamal dev ...` (Option 1)
+- `bin/kamal dev ...` (Option 2 - custom binstub)
+- `bundle exec kamal dev ...` (Option 3 - with boot file require)
 
 ### deploy
 

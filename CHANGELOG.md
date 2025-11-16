@@ -10,16 +10,26 @@
   - Moved spec files to match new structure
 
 ### Added
-- **CLI Integration Hook**: Seamless integration with Kamal executable
+- **CLI Integration Hook**: Integration with Kamal executable via class_eval
   - Added `lib/kamal-dev.rb` stub for bundler auto-require
   - Hook into `Kamal::Cli::Main` to register `dev` subcommand via `class_eval`
-  - Users can now run `bundle exec kamal dev deploy` directly
-  - No separate executable needed - extends existing kamal command
+  - Extends existing kamal command rather than creating separate executable
+  - **Note**: Kamal has no plugin system, so gem must be explicitly required
 - **Development Binstub**: Created `exe/kamal-dev` for local development testing
 
 ### Changed
-- Updated installation instructions in README to document CLI integration
+- **Updated Installation Documentation**: README now includes three integration options:
+  1. **Simple approach**: `bundle exec ruby -rkamal-dev -S kamal dev` (recommended for quick start)
+  2. **Custom binstub**: Edit `bin/kamal` to add `require "kamal-dev"` (recommended for regular use)
+  3. **Boot file require**: Add `require "kamal-dev"` to project initialization (e.g., Rails `config/boot.rb`)
+  - Added `bin/kamal-template` as reference implementation for custom binstub
+  - Updated Quick Start and Commands Reference sections with correct usage patterns
 - All 142 tests passing with new namespace structure
+
+### Documentation
+- Clarified that kamal-dev requires explicit loading due to lack of Kamal plugin system
+- Provided multiple integration paths for different use cases and project setups
+- Added troubleshooting guidance for CLI integration issues
 
 ## [0.1.0] - 2025-11-15
 

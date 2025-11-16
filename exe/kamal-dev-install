@@ -1,0 +1,173 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+
+class KamalDevInstaller
+  PATCH_MARKER = 'require "kamal-dev"'
+  BINSTUB_PATH = "bin/kamal"
+
+  def initialize
+    @patched = false
+    @created_binstub = false
+  end
+
+  def run
+    print_header
+
+    unless in_project_directory?
+      error "Not in a project directory. Please run this from your project root (must have a Gemfile)."
+      exit 1
+    end
+
+    ensure_bin_directory
+    ensure_kamal_binstub
+    patch_binstub
+
+    print_success
+  end
+
+  private
+
+  def print_header
+    puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    puts "🔧 Kamal Dev Installer"
+    puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    puts
+  end
+
+  def in_project_directory?
+    File.exist?("Gemfile")
+  end
+
+  def ensure_bin_directory
+    return if Dir.exist?("bin")
+
+    puts "📁 Creating bin directory..."
+    FileUtils.mkdir_p("bin")
+  end
+
+  def ensure_kamal_binstub
+    return if File.exist?(BINSTUB_PATH)
+
+    puts "📝 Generating kamal binstub..."
+    unless system("bundle binstubs kamal --force", out: File::NULL, err: File::NULL)
+      error "Failed to generate kamal binstub. Make sure 'kamal' gem is in your Gemfile."
+      exit 1
+    end
+
+    @created_binstub = true
+
+    unless File.exist?(BINSTUB_PATH)
+      error "Binstub generation succeeded but #{BINSTUB_PATH} not found. Please check your bundler configuration."
+      exit 1
+    end
+
+    puts "✓ Created #{BINSTUB_PATH}"
+  end
+
+  def patch_binstub
+    content = File.read(BINSTUB_PATH)
+
+    if already_patched?(content)
+      puts "✓ #{BINSTUB_PATH} already patched (kamal-dev is loaded)"
+      return
+    end
+
+    puts "🔧 Patching #{BINSTUB_PATH}..."
+
+    patched_content = insert_require(content)
+
+    if patched_content.nil?
+      error "Could not find a safe insertion point in #{BINSTUB_PATH}. Please add '#{PATCH_MARKER}' manually after bundler setup."
+      exit 1
+    end
+
+    # Write patched content
+    File.write(BINSTUB_PATH, patched_content)
+
+    # Preserve executable permissions
+    File.chmod(0755, BINSTUB_PATH)
+
+    @patched = true
+    puts "✓ Patched #{BINSTUB_PATH}"
+  end
+
+  def already_patched?(content)
+    content.include?(PATCH_MARKER) || content.include?("require 'kamal-dev'")
+  end
+
+  def insert_require(content)
+    lines = content.lines
+
+    # Strategy 1: Insert after "require 'bundler/setup'" or similar bundler requires
+    bundler_setup_index = lines.find_index { |line| line =~ /require ['"]bundler\/setup['"]/ }
+
+    if bundler_setup_index
+      # Insert after bundler setup and any following blank lines
+      insert_index = bundler_setup_index + 1
+      insert_index += 1 while insert_index < lines.size && lines[insert_index].strip.empty?
+
+      lines.insert(insert_index, "\n# Load kamal-dev extension to enable 'kamal dev' commands\n#{PATCH_MARKER}\n")
+      return lines.join
+    end
+
+    # Strategy 2: Insert before "load Gem.bin_path" or "Gem.activate_bin_path"
+    load_index = lines.find_index { |line| line =~ /(load Gem\.bin_path|Gem\.activate_bin_path)/ }
+
+    if load_index
+      # Insert before the load line, with a blank line separator
+      lines.insert(load_index, "\n# Load kamal-dev extension to enable 'kamal dev' commands\n#{PATCH_MARKER}\n\n")
+      return lines.join
+    end
+
+    # Strategy 3: Insert after shebang and frozen_string_literal
+    # This is the fallback for binstubs we don't recognize
+    insert_index = 0
+    insert_index += 1 if lines[0]&.start_with?("#!")
+    insert_index += 1 if lines[insert_index]&.include?("frozen_string_literal")
+    insert_index += 1 while insert_index < lines.size && lines[insert_index].strip.empty?
+
+    if insert_index < lines.size
+      lines.insert(insert_index, "\n# Load kamal-dev extension to enable 'kamal dev' commands\n#{PATCH_MARKER}\n\n")
+      return lines.join
+    end
+
+    # Could not find a safe insertion point
+    nil
+  end
+
+  def print_success
+    puts
+    puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    puts "✅ Installation complete!"
+    puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    puts
+
+    if @created_binstub || @patched
+      puts "You can now use the 'kamal dev' commands:"
+      puts
+      puts "  bin/kamal dev deploy --count 3"
+      puts "  bin/kamal dev list"
+      puts "  bin/kamal dev stop --all"
+      puts "  bin/kamal dev remove --all"
+      puts
+      puts "For more information, run: bin/kamal dev help"
+    else
+      puts "No changes were needed - you're already set up!"
+      puts
+      puts "Use: bin/kamal dev <command>"
+    end
+
+    puts
+  end
+
+  def error(message)
+    puts
+    puts "❌ Error: #{message}"
+    puts
+  end
+end
+
+# Run installer
+KamalDevInstaller.new.run
