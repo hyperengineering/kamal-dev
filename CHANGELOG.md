@@ -1,5 +1,31 @@
 ## [Unreleased]
 
+## [0.1.2] - 2025-11-16
+
+### Added
+- **Automatic Plugin Installer** (`plugin-kamal-dev` executable)
+  - One-command setup: `bundle exec plugin-kamal-dev`
+  - Automatically generates `bin/kamal` binstub if missing
+  - Intelligently patches binstub to load kamal-dev extension
+  - Idempotent - safe to run multiple times
+  - Three insertion strategies for maximum compatibility
+  - Clear success/error messages with usage instructions
+  - Comprehensive test suite (`test_installer.sh`)
+- **Reference Implementation**: `bin/kamal-template` binstub example
+
+### Changed
+- **Simplified Installation Flow**: Plugin installer is now the primary installation method
+  - Primary: `bundle exec plugin-kamal-dev` (one command, fully automated)
+  - Alternative options available for users who prefer manual setup
+  - Updated Quick Start examples to use `bin/kamal dev` commands
+  - Updated Commands Reference with simpler usage patterns
+
+### Documentation
+- Restructured README with automatic installer as recommended approach
+- Clear step-by-step installation instructions
+- Alternative setup methods in collapsible section
+- Examples updated to match installer output
+
 ## [0.1.1] - 2025-11-16
 
 ### Fixed
