@@ -91,28 +91,17 @@ Then use: `bundle exec kamal dev`
 
 ## Quick Start
 
-**1. Create configuration file** (`config/dev.yml`):
+**1. Generate configuration template:**
 
-```yaml
-service: myapp-dev
-image: .devcontainer/devcontainer.json  # Or direct image: "ruby:3.2"
-
-provider:
-  type: upcloud
-  zone: us-nyc1
-  plan: 1xCPU-2GB
-
-secrets:
-  - UPCLOUD_USERNAME
-  - UPCLOUD_PASSWORD
-
-defaults:
-  cpus: 2
-  memory: 4g
-
-vms:
-  count: 3
+```bash
+kamal dev init
 ```
+
+This creates `config/dev.yml` with a complete template. Edit it to configure:
+- Your cloud provider (currently UpCloud)
+- VM size and region
+- Number of workspaces
+- Resource limits
 
 **2. Set up secrets** (`.kamal/secrets`):
 
@@ -240,6 +229,31 @@ echo $GITHUB_TOKEN_B64 | base64 -d  # Decode if needed
 ## Commands Reference
 
 All commands below assume you've run `bundle exec plugin-kamal-dev` as described in the Installation section. If you're using an alternative setup method, adjust the commands accordingly (see Alternative Setup Methods in Installation).
+
+### init
+
+Generate a configuration template.
+
+```bash
+kamal dev init
+```
+
+**What it does:**
+1. Creates `config/` directory if it doesn't exist
+2. Copies template to `config/dev.yml`
+3. Prompts before overwriting if file already exists
+4. Displays next steps for configuration
+
+**Example output:**
+```
+✅ Created config/dev.yml
+
+Next steps:
+
+1. Edit config/dev.yml with your cloud provider credentials
+2. Create .kamal/secrets file with your secrets
+3. Deploy your first workspace: kamal dev deploy --count 3
+```
 
 ### deploy
 

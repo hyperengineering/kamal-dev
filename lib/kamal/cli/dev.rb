@@ -20,6 +20,39 @@ module Kamal
     class Dev < Thor
       class_option :config, type: :string, default: "config/dev.yml", desc: "Path to configuration file"
 
+      desc "init", "Generate config/dev.yml template"
+      def init
+        config_path = "config/dev.yml"
+
+        if File.exist?(config_path)
+          print "⚠️  #{config_path} already exists. Overwrite? (y/n): "
+          response = $stdin.gets.chomp.downcase
+          return unless response == "y" || response == "yes"
+        end
+
+        # Create config directory if it doesn't exist
+        FileUtils.mkdir_p("config") unless Dir.exist?("config")
+
+        # Copy template to config/dev.yml
+        template_path = File.expand_path("../../dev/templates/dev.yml", __FILE__)
+        FileUtils.cp(template_path, config_path)
+
+        puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        puts "✅ Created #{config_path}"
+        puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        puts
+        puts "Next steps:"
+        puts
+        puts "1. Edit #{config_path} with your cloud provider credentials"
+        puts "2. Create .kamal/secrets file with your secrets:"
+        puts "   export UPCLOUD_USERNAME=\"your-username\""
+        puts "   export UPCLOUD_PASSWORD=\"your-password\""
+        puts
+        puts "3. Deploy your first workspace:"
+        puts "   kamal dev deploy --count 3"
+        puts
+      end
+
       desc "deploy [NAME]", "Deploy devcontainer(s)"
       option :count, type: :numeric, default: 1, desc: "Number of containers to deploy"
       option :from, type: :string, default: ".devcontainer/devcontainer.json", desc: "Path to devcontainer.json"

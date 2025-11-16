@@ -1,0 +1,49 @@
+# Kamal Dev Configuration
+# Deploy and manage development container workspaces to cloud infrastructure
+
+# Service name (used as prefix for container naming)
+service: myapp-dev
+
+# Image source - either reference a devcontainer.json or specify a direct image
+# Option 1: Use devcontainer.json specification
+image: .devcontainer/devcontainer.json
+# Option 2: Use direct image reference
+# image: ruby:3.2
+
+# Cloud provider configuration
+provider:
+  type: upcloud              # Cloud provider (currently: upcloud)
+  zone: us-nyc1              # Data center location (upcloud zones: us-nyc1, de-fra1, uk-lon1, etc.)
+  plan: 1xCPU-2GB            # VM plan/size (upcloud plans: 1xCPU-1GB, 1xCPU-2GB, 2xCPU-4GB, etc.)
+
+# Secrets to inject from .kamal/secrets file
+# These will be loaded and injected as Base64-encoded environment variables
+secrets:
+  - UPCLOUD_USERNAME         # Required: UpCloud API username
+  - UPCLOUD_PASSWORD         # Required: UpCloud API password
+  # Add your application secrets here:
+  # - GITHUB_TOKEN
+  # - DATABASE_URL
+  # - API_KEY
+
+# Path to secrets file (default: .kamal/secrets)
+# secrets_file: .kamal/secrets
+
+# SSH configuration
+ssh:
+  key_path: ~/.ssh/id_rsa.pub  # SSH public key for VM access (default: ~/.ssh/id_rsa.pub)
+
+# Default resource limits for containers
+defaults:
+  cpus: 2                    # CPU limit (cores)
+  memory: 4g                 # Memory limit
+  memory_swap: 8g            # Swap limit (optional)
+
+# VM and container deployment configuration
+vms:
+  count: 3                   # Number of workspaces to deploy
+  spread: false              # false = colocate containers, true = one container per VM
+
+# Container naming pattern
+naming:
+  pattern: "{service}-{index}"  # Results in: myapp-dev-1, myapp-dev-2, etc.
