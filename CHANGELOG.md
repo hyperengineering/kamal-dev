@@ -1,5 +1,19 @@
 ## [Unreleased]
 
+## [0.1.4] - 2025-11-16
+
+### Added
+- **`kamal dev init` command**: Generate `config/dev.yml` template
+  - Creates comprehensive configuration template with inline documentation
+  - Prompts before overwriting existing configuration
+  - Automatically creates `config/` directory if needed
+  - Displays helpful next steps after generation
+  - Template includes all configuration options with examples and comments
+
+### Changed
+- **Quick Start documentation**: Updated to use `kamal dev init` instead of manual config creation
+- **Commands Reference**: Added full documentation for `init` command
+
 ## [0.1.3] - 2025-11-16
 
 ### Added
