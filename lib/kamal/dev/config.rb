@@ -32,6 +32,52 @@ module Kamal
         raw_config[:image]
       end
 
+      # Build configuration for building images from source
+      #
+      # @return [Hash] Build configuration (devcontainer, dockerfile, context)
+      def build
+        raw_config[:build]&.deep_stringify_keys || {}
+      end
+
+      # Check if build configuration is present
+      #
+      # @return [Boolean] true if build section exists
+      def build?
+        !build.empty?
+      end
+
+      # Get build source type
+      #
+      # @return [Symbol, nil] :devcontainer, :dockerfile, or nil
+      def build_source_type
+        return nil unless build?
+
+        if build["devcontainer"]
+          :devcontainer
+        elsif build["dockerfile"]
+          :dockerfile
+        end
+      end
+
+      # Get build source path (devcontainer.json or Dockerfile)
+      #
+      # @return [String, nil] Path to build source
+      def build_source_path
+        case build_source_type
+        when :devcontainer
+          build["devcontainer"]
+        when :dockerfile
+          build["dockerfile"]
+        end
+      end
+
+      # Get build context path
+      #
+      # @return [String] Build context (defaults to ".")
+      def build_context
+        build["context"] || "."
+      end
+
       def provider
         raw_config[:provider]&.deep_stringify_keys || {}
       end
@@ -134,10 +180,18 @@ module Kamal
         @devcontainer ||= load_devcontainer
       end
 
-      # Check if image config points to a devcontainer.json file
+      # Check if using devcontainer.json for configuration
       #
-      # @return [Boolean] true if image is a path to devcontainer.json
+      # Supports both:
+      # - New format: build: { devcontainer: ".devcontainer/devcontainer.json" }
+      # - Old format: image: ".devcontainer/devcontainer.json" (backward compatibility)
+      #
+      # @return [Boolean] true if using devcontainer.json
       def devcontainer_json?
+        # New format: build.devcontainer
+        return true if build_source_type == :devcontainer
+
+        # Old format: image points to .json file (backward compatibility)
         image.to_s.end_with?(".json") || image.to_s.include?("devcontainer")
       end
 
@@ -179,11 +233,18 @@ module Kamal
 
       # Load devcontainer configuration
       #
+      # Supports:
+      # - New format: build.devcontainer
+      # - Old format: image pointing to .json (backward compatibility)
+      # - Direct image reference
+      #
       # @return [Devcontainer] Devcontainer instance
       def load_devcontainer
         config_hash = if devcontainer_json?
           # Parse devcontainer.json file
-          parser = DevcontainerParser.new(image)
+          # New format: build.devcontainer, Old format: image
+          devcontainer_path = build_source_path || image
+          parser = DevcontainerParser.new(devcontainer_path)
           parser.parse
         else
           # Direct image reference - create minimal config

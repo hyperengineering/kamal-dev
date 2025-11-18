@@ -38,13 +38,20 @@ module Kamal
       # @param dockerfile [String] Path to Dockerfile
       # @param context [String] Build context path (default: ".")
       # @param tag [String] Image tag (optional, auto-generated if not provided)
+      # @param image_base [String] Base image name from config (optional, uses config.service if not provided)
       # @param build_args [Hash] Build arguments (optional)
       # @param secrets [Hash] Build secrets (optional)
       # @return [String] Full image reference with tag
       # @raise [Kamal::Dev::BuildError] if build fails
-      def build(dockerfile:, context: ".", tag: nil, build_args: {}, secrets: {})
+      def build(dockerfile:, context: ".", tag: nil, image_base: nil, build_args: {}, secrets: {})
         tag ||= registry.tag_with_timestamp
-        image_ref = registry.image_tag(config.service, tag)
+
+        # Use image_base if provided (new format), otherwise fall back to service name (old format)
+        image_ref = if image_base
+          registry.image_tag(image_base, tag)
+        else
+          registry.image_tag(config.service, tag)
+        end
 
         command = build_command(
           dockerfile: dockerfile,

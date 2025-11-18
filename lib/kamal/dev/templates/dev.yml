@@ -4,17 +4,32 @@
 # Service name (used as prefix for container naming)
 service: myapp-dev
 
-# Image source - either reference a devcontainer.json or specify a direct image
-# Option 1: Use devcontainer.json specification
-image: .devcontainer/devcontainer.json
-# Option 2: Use direct image reference
+# Destination image (where to push/deploy) - matches Kamal's usage
+# Registry server will be prepended if not included
+# Examples:
+#   myorg/myapp          → ghcr.io/myorg/myapp (registry prepended)
+#   ghcr.io/myorg/myapp  → ghcr.io/myorg/myapp (explicit registry)
+image: myorg/myapp
+
+# Build configuration (optional - omit to deploy existing image)
+# Option 1: Build from devcontainer.json
+build:
+  devcontainer: .devcontainer/devcontainer.json
+
+# Option 2: Build from Dockerfile
+# build:
+#   dockerfile: .devcontainer/Dockerfile
+#   context: .devcontainer
+
+# Option 3: Deploy existing image (no build needed)
+# Remove the build: section entirely and set image to existing image:
 # image: ruby:3.2
 
 # Container registry configuration (for building and pushing custom images)
-# Required when using Dockerfile builds
+# Required when using build: section
 registry:
   server: ghcr.io                # Registry server (default: ghcr.io - GitHub Container Registry)
-                                  # Alternatives: hub.docker.com, your-custom-registry.io
+                                  # Alternatives: docker.io, your-custom-registry.io
   username: GITHUB_USER           # Environment variable name for registry username
   password: GITHUB_TOKEN          # Environment variable name for registry password/token
                                   # For GHCR: create a Personal Access Token with write:packages scope

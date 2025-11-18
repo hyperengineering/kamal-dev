@@ -56,11 +56,31 @@ module Kamal
         config.registry_password
       end
 
-      # Generate image name without tag
+      # Get full image name with registry server prepended if needed
       #
-      # Format: {registry}/{user}/{service}-dev
-      # Example: ghcr.io/ljuti/myapp-dev
+      # Supports both patterns:
+      # - Full path: "ghcr.io/org/app" → "ghcr.io/org/app"
+      # - Short path: "org/app" → "ghcr.io/org/app" (registry prepended)
+      # - Name only: "app" → "ghcr.io/app"
       #
+      # @param image_ref [String] Image reference from config.image
+      # @return [String] Full image name with registry
+      def full_image_name(image_ref)
+        # Check if image already includes a registry (has a . in first component)
+        first_component = image_ref.split("/").first
+
+        if first_component.include?(".")
+          # Already has registry: "ghcr.io/org/app" or "docker.io/library/ruby"
+          image_ref
+        else
+          # No registry: "org/app" or "app" - prepend registry server
+          "#{server}/#{image_ref}"
+        end
+      end
+
+      # Generate image name without tag (DEPRECATED - kept for backward compatibility)
+      #
+      # @deprecated Use full_image_name(config.image) instead
       # @param service [String] Service name (from config.service)
       # @return [String] Full image name without tag
       # @raise [Kamal::Dev::RegistryError] if username not configured
@@ -72,15 +92,14 @@ module Kamal
 
       # Generate full image reference with tag
       #
-      # Format: {registry}/{user}/{service}-dev:{tag}
-      # Example: ghcr.io/ljuti/myapp-dev:abc123
-      #
-      # @param service [String] Service name
+      # @param image_base [String] Base image name (can be full or short path)
       # @param tag [String] Image tag (timestamp, git SHA, or custom)
       # @return [String] Full image reference with tag
-      # @raise [Kamal::Dev::RegistryError] if username not configured
-      def image_tag(service, tag)
-        "#{image_name(service)}:#{tag}"
+      def image_tag(image_base, tag)
+        base = (image_base.is_a?(String) && (image_base.include?("/") || image_base.include?("."))) ?
+                 full_image_name(image_base) :
+                 image_name(image_base)  # Backward compatibility
+        "#{base}:#{tag}"
       end
 
       # Generate docker login command

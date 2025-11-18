@@ -58,8 +58,8 @@ module Kamal
 
       desc "build", "Build image from Dockerfile and push to registry"
       option :tag, type: :string, desc: "Custom image tag (defaults to timestamp)"
-      option :dockerfile, type: :string, default: "Dockerfile", desc: "Path to Dockerfile"
-      option :context, type: :string, default: ".", desc: "Build context path"
+      option :dockerfile, type: :string, desc: "Path to Dockerfile (overrides config)"
+      option :context, type: :string, desc: "Build context path (overrides config)"
       option :skip_push, type: :boolean, default: false, desc: "Skip pushing image to registry"
       def build
         config = load_config
@@ -96,22 +96,26 @@ module Kamal
         end
         puts
 
-        # Build image
+        # Determine build source from config or options
+        # Priority: CLI options > config.build > defaults
+        dockerfile = options[:dockerfile] || config.build["dockerfile"] || "Dockerfile"
+        context = options[:context] || config.build_context
         tag = options[:tag]
-        dockerfile = options[:dockerfile]
-        context = options[:context]
 
         puts "Building image..."
         puts "  Dockerfile: #{dockerfile}"
         puts "  Context: #{context}"
+        puts "  Destination: #{config.image}"
         puts "  Tag: #{tag || "(auto-generated timestamp)"}"
         puts
 
         begin
+          # Use config.image as base name, registry will handle full path
           image_ref = builder.build(
             dockerfile: dockerfile,
             context: context,
-            tag: tag
+            tag: tag,
+            image_base: config.image
           )
           puts
           puts "✓ Built image: #{image_ref}"
@@ -151,9 +155,9 @@ module Kamal
 
         # Use provided image or generate from config
         image_ref ||= begin
-          puts "No image specified. Using service name from config..."
+          puts "No image specified. Using image from config..."
           tag = registry.tag_with_timestamp
-          registry.image_tag(config.service, tag)
+          registry.image_tag(config.image, tag)
         end
 
         # Check Docker is available
@@ -268,7 +272,7 @@ module Kamal
           if options[:skip_build]
             # Use existing image
             tag = options[:tag] || "latest"
-            image_ref = registry.image_tag(config.service, tag)
+            image_ref = registry.image_tag(config.image, tag)
             puts "Using existing image: #{image_ref}"
             puts
           else
@@ -280,7 +284,12 @@ module Kamal
             tag = options[:tag] || Time.now.utc.strftime("%Y%m%d%H%M%S")
 
             begin
-              image_ref = builder.build(dockerfile: dockerfile, context: context, tag: tag)
+              image_ref = builder.build(
+                dockerfile: dockerfile,
+                context: context,
+                tag: tag,
+                image_base: config.image
+              )
               puts "✓ Built #{image_ref}"
               puts
             rescue => e
