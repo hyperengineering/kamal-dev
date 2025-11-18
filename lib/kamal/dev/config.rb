@@ -134,7 +134,10 @@ module Kamal
       def registry_username
         return nil unless registry["username"]
 
-        ENV[registry["username"]]
+        # Handle both string and array formats (YAML parsing inconsistency)
+        env_var = registry["username"]
+        env_var = env_var.first if env_var.is_a?(Array)
+        ENV[env_var]
       end
 
       # Registry password/token loaded from environment variable
@@ -143,7 +146,10 @@ module Kamal
       def registry_password
         return nil unless registry["password"]
 
-        ENV[registry["password"]]
+        # Handle both string and array formats (YAML parsing inconsistency)
+        env_var = registry["password"]
+        env_var = env_var.first if env_var.is_a?(Array)
+        ENV[env_var]
       end
 
       # Check if registry credentials are configured
