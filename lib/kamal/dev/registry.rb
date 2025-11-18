@@ -66,11 +66,12 @@ module Kamal
       # @param image_ref [String] Image reference from config.image
       # @return [String] Full image name with registry
       def full_image_name(image_ref)
-        # Check if image already includes a registry (has a . in first component)
+        # Check if image already includes a registry
+        # Registry indicators: has a . (ghcr.io) or : (localhost:5000) in first component
         first_component = image_ref.split("/").first
 
-        if first_component.include?(".")
-          # Already has registry: "ghcr.io/org/app" or "docker.io/library/ruby"
+        if first_component.include?(".") || first_component.include?(":")
+          # Already has registry: "ghcr.io/org/app", "docker.io/library/ruby", "localhost:5000/app"
           image_ref
         else
           # No registry: "org/app" or "app" - prepend registry server

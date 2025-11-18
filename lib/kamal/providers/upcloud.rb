@@ -131,8 +131,8 @@ module Kamal
       # Real-time pricing queries not implemented in Phase 1.
       #
       # @param config [Hash] VM configuration
-      # @option config [String] :zone Cloud zone
-      # @option config [String] :plan VM plan
+      # @option config [String] "zone" Cloud zone (string key)
+      # @option config [String] "plan" VM plan (string key)
       #
       # @return [Hash] Cost estimate details
       # @option return [String] :warning User-friendly cost warning
@@ -140,11 +140,14 @@ module Kamal
       # @option return [String] :zone Cloud zone
       # @option return [String] :pricing_url UpCloud pricing page
       def estimate_cost(config)
+        plan = config["plan"] || config[:plan]
+        zone = config["zone"] || config[:zone]
+
         {
-          warning: "Deploying VMs with plan #{config[:plan]} in zone #{config[:zone]}. " \
+          warning: "Deploying VMs with plan #{plan} in zone #{zone}. " \
                    "Check pricing for accurate costs.",
-          plan: config[:plan],
-          zone: config[:zone],
+          plan: plan,
+          zone: zone,
           pricing_url: "https://upcloud.com/pricing"
         }
       end

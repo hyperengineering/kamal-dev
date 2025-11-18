@@ -879,7 +879,7 @@ module Kamal
         #
         # @note Key must be in OpenSSH format (starts with "ssh-rsa", "ssh-ed25519", etc.)
         def load_ssh_key
-          ssh_key_path = File.expand_path(config.ssh_key_path)
+          ssh_key_path = File.expand_path(load_config.ssh_key_path)
 
           unless File.exist?(ssh_key_path)
             raise "SSH public key not found at #{ssh_key_path}. " \

@@ -34,32 +34,92 @@ RSpec.describe Kamal::Dev::Builder do
   end
 
   describe "#build" do
-    it "builds image with provided tag" do
-      allow(builder).to receive(:execute_with_output).and_return({success: true, output: "", error: ""})
+    context "with service name (backward compatibility)" do
+      it "builds image with provided tag" do
+        allow(builder).to receive(:execute_with_output).and_return({success: true, output: "", error: ""})
 
-      result = builder.build(
-        dockerfile: "Dockerfile",
-        context: ".",
-        tag: "abc123"
-      )
+        result = builder.build(
+          dockerfile: "Dockerfile",
+          context: ".",
+          tag: "abc123"
+        )
 
-      expect(result).to eq("ghcr.io/testuser/myapp-dev:abc123")
-      expect(builder).to have_received(:execute_with_output).with(
-        array_including("docker", "build", "-t", "ghcr.io/testuser/myapp-dev:abc123"),
-        /Building image/
-      )
+        expect(result).to eq("ghcr.io/testuser/myapp-dev:abc123")
+        expect(builder).to have_received(:execute_with_output).with(
+          array_including("docker", "build", "-t", "ghcr.io/testuser/myapp-dev:abc123"),
+          /Building image/
+        )
+      end
+
+      it "auto-generates timestamp tag when not provided" do
+        allow(registry).to receive(:tag_with_timestamp).and_return("1700000000")
+        allow(builder).to receive(:execute_with_output).and_return({success: true, output: "", error: ""})
+
+        result = builder.build(
+          dockerfile: "Dockerfile",
+          context: "."
+        )
+
+        expect(result).to eq("ghcr.io/testuser/myapp-dev:1700000000")
+      end
     end
 
-    it "auto-generates timestamp tag when not provided" do
-      allow(registry).to receive(:tag_with_timestamp).and_return("1700000000")
-      allow(builder).to receive(:execute_with_output).and_return({success: true, output: "", error: ""})
+    context "with image_base parameter (new format)" do
+      it "builds image using short path with registry inference" do
+        allow(builder).to receive(:execute_with_output).and_return({success: true, output: "", error: ""})
 
-      result = builder.build(
-        dockerfile: "Dockerfile",
-        context: "."
-      )
+        result = builder.build(
+          dockerfile: "Dockerfile",
+          context: ".",
+          tag: "abc123",
+          image_base: "myorg/myapp"
+        )
 
-      expect(result).to eq("ghcr.io/testuser/myapp-dev:1700000000")
+        expect(result).to eq("ghcr.io/myorg/myapp:abc123")
+        expect(builder).to have_received(:execute_with_output).with(
+          array_including("docker", "build", "-t", "ghcr.io/myorg/myapp:abc123"),
+          /Building image/
+        )
+      end
+
+      it "builds image using full path with explicit registry" do
+        allow(builder).to receive(:execute_with_output).and_return({success: true, output: "", error: ""})
+
+        result = builder.build(
+          dockerfile: ".devcontainer/Dockerfile",
+          context: ".devcontainer",
+          tag: "v1.0.0",
+          image_base: "ghcr.io/myorg/myapp"
+        )
+
+        expect(result).to eq("ghcr.io/myorg/myapp:v1.0.0")
+      end
+
+      it "auto-generates timestamp when tag not provided" do
+        allow(registry).to receive(:tag_with_timestamp).and_return("1700000000")
+        allow(builder).to receive(:execute_with_output).and_return({success: true, output: "", error: ""})
+
+        result = builder.build(
+          dockerfile: "Dockerfile",
+          context: ".",
+          image_base: "myorg/myapp"
+        )
+
+        expect(result).to eq("ghcr.io/myorg/myapp:1700000000")
+      end
+
+      it "handles custom registries in image_base" do
+        allow(builder).to receive(:execute_with_output).and_return({success: true, output: "", error: ""})
+
+        result = builder.build(
+          dockerfile: "Dockerfile",
+          context: ".",
+          tag: "latest",
+          image_base: "docker.io/myorg/myapp"
+        )
+
+        expect(result).to eq("docker.io/myorg/myapp:latest")
+      end
     end
 
     it "includes dockerfile flag when not default" do

@@ -300,4 +300,187 @@ RSpec.describe Kamal::Dev::Config do
       expect { config.validate! }.not_to raise_error
     end
   end
+
+  describe "#build" do
+    it "returns empty hash when build section not present" do
+      config = described_class.new(valid_config_hash)
+      expect(config.build).to eq({})
+    end
+
+    it "returns build configuration when present" do
+      config_with_build = valid_config_hash.merge(
+        "build" => {
+          "devcontainer" => ".devcontainer/devcontainer.json",
+          "context" => ".devcontainer"
+        }
+      )
+      config = described_class.new(config_with_build)
+
+      build = config.build
+      expect(build["devcontainer"]).to eq(".devcontainer/devcontainer.json")
+      expect(build["context"]).to eq(".devcontainer")
+    end
+
+    it "returns build configuration for Dockerfile builds" do
+      config_with_build = valid_config_hash.merge(
+        "build" => {
+          "dockerfile" => ".devcontainer/Dockerfile",
+          "context" => "."
+        }
+      )
+      config = described_class.new(config_with_build)
+
+      build = config.build
+      expect(build["dockerfile"]).to eq(".devcontainer/Dockerfile")
+      expect(build["context"]).to eq(".")
+    end
+  end
+
+  describe "#build?" do
+    it "returns false when build section not present" do
+      config = described_class.new(valid_config_hash)
+      expect(config.build?).to be false
+    end
+
+    it "returns true when build section present" do
+      config_with_build = valid_config_hash.merge(
+        "build" => {"devcontainer" => ".devcontainer/devcontainer.json"}
+      )
+      config = described_class.new(config_with_build)
+      expect(config.build?).to be true
+    end
+
+    it "returns false when build section is empty" do
+      config_with_empty_build = valid_config_hash.merge("build" => {})
+      config = described_class.new(config_with_empty_build)
+      expect(config.build?).to be false
+    end
+  end
+
+  describe "#build_source_type" do
+    it "returns :devcontainer when devcontainer specified" do
+      config_with_devcontainer = valid_config_hash.merge(
+        "build" => {"devcontainer" => ".devcontainer/devcontainer.json"}
+      )
+      config = described_class.new(config_with_devcontainer)
+      expect(config.build_source_type).to eq(:devcontainer)
+    end
+
+    it "returns :dockerfile when dockerfile specified" do
+      config_with_dockerfile = valid_config_hash.merge(
+        "build" => {"dockerfile" => "Dockerfile"}
+      )
+      config = described_class.new(config_with_dockerfile)
+      expect(config.build_source_type).to eq(:dockerfile)
+    end
+
+    it "returns nil when build section empty" do
+      config = described_class.new(valid_config_hash)
+      expect(config.build_source_type).to be_nil
+    end
+
+    it "returns nil when build has no devcontainer or dockerfile" do
+      config_with_context_only = valid_config_hash.merge(
+        "build" => {"context" => "."}
+      )
+      config = described_class.new(config_with_context_only)
+      expect(config.build_source_type).to be_nil
+    end
+
+    it "prioritizes devcontainer over dockerfile when both present" do
+      config_with_both = valid_config_hash.merge(
+        "build" => {
+          "devcontainer" => ".devcontainer/devcontainer.json",
+          "dockerfile" => "Dockerfile"
+        }
+      )
+      config = described_class.new(config_with_both)
+      expect(config.build_source_type).to eq(:devcontainer)
+    end
+  end
+
+  describe "#build_source_path" do
+    it "returns devcontainer path when type is :devcontainer" do
+      config_with_devcontainer = valid_config_hash.merge(
+        "build" => {"devcontainer" => ".devcontainer/devcontainer.json"}
+      )
+      config = described_class.new(config_with_devcontainer)
+      expect(config.build_source_path).to eq(".devcontainer/devcontainer.json")
+    end
+
+    it "returns dockerfile path when type is :dockerfile" do
+      config_with_dockerfile = valid_config_hash.merge(
+        "build" => {"dockerfile" => ".devcontainer/Dockerfile"}
+      )
+      config = described_class.new(config_with_dockerfile)
+      expect(config.build_source_path).to eq(".devcontainer/Dockerfile")
+    end
+
+    it "returns nil when no build source" do
+      config = described_class.new(valid_config_hash)
+      expect(config.build_source_path).to be_nil
+    end
+  end
+
+  describe "#build_context" do
+    it "returns configured build context" do
+      config_with_context = valid_config_hash.merge(
+        "build" => {
+          "dockerfile" => "Dockerfile",
+          "context" => ".devcontainer"
+        }
+      )
+      config = described_class.new(config_with_context)
+      expect(config.build_context).to eq(".devcontainer")
+    end
+
+    it "defaults to '.' when context not specified" do
+      config_with_build = valid_config_hash.merge(
+        "build" => {"dockerfile" => "Dockerfile"}
+      )
+      config = described_class.new(config_with_build)
+      expect(config.build_context).to eq(".")
+    end
+
+    it "defaults to '.' when no build section" do
+      config = described_class.new(valid_config_hash)
+      expect(config.build_context).to eq(".")
+    end
+  end
+
+  describe "#devcontainer_json? - backward compatibility" do
+    it "returns true for new format with build.devcontainer" do
+      config_new_format = valid_config_hash.merge(
+        "image" => "myorg/myapp",
+        "build" => {"devcontainer" => ".devcontainer/devcontainer.json"}
+      )
+      config = described_class.new(config_new_format)
+      expect(config.devcontainer_json?).to be true
+    end
+
+    it "returns true for old format with image pointing to .json" do
+      config_old_format = valid_config_hash.merge(
+        "image" => ".devcontainer/devcontainer.json"
+      )
+      config = described_class.new(config_old_format)
+      expect(config.devcontainer_json?).to be true
+    end
+
+    it "returns false when using direct image reference" do
+      config_direct_image = valid_config_hash.merge(
+        "image" => "ruby:3.2"
+      )
+      config = described_class.new(config_direct_image)
+      expect(config.devcontainer_json?).to be false
+    end
+
+    it "returns false when using build.dockerfile" do
+      config_dockerfile = valid_config_hash.merge(
+        "image" => "myorg/myapp",
+        "build" => {"dockerfile" => "Dockerfile"}
+      )
+      config = described_class.new(config_dockerfile)
+      expect(config.devcontainer_json?).to be false
+    end
+  end
 end

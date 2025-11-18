@@ -395,6 +395,285 @@ RSpec.describe Kamal::Cli::Dev do
     end
   end
 
+  describe "build command" do
+    let(:temp_dir) { Dir.mktmpdir }
+    let(:config_path) { File.join(temp_dir, "config", "dev.yml") }
+    let(:devcontainer_path) { File.join(temp_dir, ".devcontainer", "devcontainer.json") }
+    let(:compose_path) { File.join(temp_dir, ".devcontainer", "compose.yaml") }
+    let(:dockerfile_path) { File.join(temp_dir, ".devcontainer", "Dockerfile") }
+
+    before do
+      ENV["GITHUB_USER"] = "testuser"
+      ENV["GITHUB_TOKEN"] = "ghp_test123"
+      FileUtils.mkdir_p(File.dirname(config_path))
+      FileUtils.mkdir_p(File.dirname(devcontainer_path))
+    end
+
+    after do
+      ENV.delete("GITHUB_USER")
+      ENV.delete("GITHUB_TOKEN")
+      FileUtils.rm_rf(temp_dir)
+    end
+
+    context "with new build.devcontainer format" do
+      it "parses devcontainer.json and extracts Dockerfile from compose.yaml" do
+        # Create config with new format
+        config = {
+          "service" => "myapp",
+          "image" => "myorg/myapp",
+          "build" => {
+            "devcontainer" => devcontainer_path
+          },
+          "registry" => {
+            "server" => "ghcr.io",
+            "username" => "GITHUB_USER",
+            "password" => "GITHUB_TOKEN"
+          },
+          "provider" => {"type" => "upcloud"}
+        }
+        File.write(config_path, config.to_yaml)
+
+        # Create devcontainer.json with compose reference
+        devcontainer = {
+          "name" => "My App",
+          "dockerComposeFile" => "compose.yaml",
+          "service" => "app"
+        }
+        File.write(devcontainer_path, devcontainer.to_json)
+
+        # Create compose.yaml with Dockerfile build
+        compose = {
+          "services" => {
+            "app" => {
+              "build" => {
+                "context" => "..",
+                "dockerfile" => ".devcontainer/Dockerfile"
+              }
+            }
+          }
+        }
+        File.write(compose_path, compose.to_yaml)
+
+        # Create dummy Dockerfile
+        File.write(dockerfile_path, "FROM ruby:3.2\n")
+
+        # Mock builder to avoid actual Docker build
+        builder = instance_double(Kamal::Dev::Builder)
+        allow(Kamal::Dev::Builder).to receive(:new).and_return(builder)
+        allow(builder).to receive(:docker_available?).and_return(true)
+        allow(builder).to receive(:login).and_return(true)
+        allow(builder).to receive(:build).and_return("ghcr.io/myorg/myapp:123")
+        allow(builder).to receive(:push).and_return(true)
+
+        # Mock registry
+        registry = instance_double(Kamal::Dev::Registry)
+        allow(Kamal::Dev::Registry).to receive(:new).and_return(registry)
+        allow(registry).to receive(:credentials_present?).and_return(true)
+        allow(registry).to receive(:server).and_return("ghcr.io")
+
+        # Capture output
+        output = capture_stdout do
+          described_class.start(["build", "--config", config_path])
+        end
+
+        # Verify build was called with correct parameters
+        expect(builder).to have_received(:build).with(
+          hash_including(
+            dockerfile: ".devcontainer/Dockerfile",
+            context: "..",
+            image_base: "myorg/myapp"
+          )
+        )
+
+        # Verify output shows destination image
+        expect(output).to include("Destination: myorg/myapp")
+      end
+    end
+
+    context "with build.dockerfile format" do
+      it "uses dockerfile and context from config" do
+        config = {
+          "service" => "myapp",
+          "image" => "myorg/myapp",
+          "build" => {
+            "dockerfile" => ".devcontainer/Dockerfile",
+            "context" => ".devcontainer"
+          },
+          "registry" => {
+            "server" => "ghcr.io",
+            "username" => "GITHUB_USER",
+            "password" => "GITHUB_TOKEN"
+          },
+          "provider" => {"type" => "upcloud"}
+        }
+        File.write(config_path, config.to_yaml)
+
+        # Create dummy Dockerfile
+        File.write(dockerfile_path, "FROM ruby:3.2\n")
+
+        # Mock builder
+        builder = instance_double(Kamal::Dev::Builder)
+        allow(Kamal::Dev::Builder).to receive(:new).and_return(builder)
+        allow(builder).to receive(:docker_available?).and_return(true)
+        allow(builder).to receive(:login).and_return(true)
+        allow(builder).to receive(:build).and_return("ghcr.io/myorg/myapp:123")
+        allow(builder).to receive(:push).and_return(true)
+
+        # Mock registry
+        registry = instance_double(Kamal::Dev::Registry)
+        allow(Kamal::Dev::Registry).to receive(:new).and_return(registry)
+        allow(registry).to receive(:credentials_present?).and_return(true)
+        allow(registry).to receive(:server).and_return("ghcr.io")
+
+        # Capture output
+        output = capture_stdout do
+          described_class.start(["build", "--config", config_path])
+        end
+
+        # Verify build was called with config values
+        expect(builder).to have_received(:build).with(
+          hash_including(
+            dockerfile: ".devcontainer/Dockerfile",
+            context: ".devcontainer",
+            image_base: "myorg/myapp"
+          )
+        )
+
+        expect(output).to include("Dockerfile: .devcontainer/Dockerfile")
+        expect(output).to include("Context: .devcontainer")
+      end
+    end
+
+    context "with CLI options overriding config" do
+      it "uses CLI --dockerfile and --context options" do
+        config = {
+          "service" => "myapp",
+          "image" => "myorg/myapp",
+          "build" => {
+            "dockerfile" => "Dockerfile",
+            "context" => "."
+          },
+          "registry" => {
+            "server" => "ghcr.io",
+            "username" => "GITHUB_USER",
+            "password" => "GITHUB_TOKEN"
+          },
+          "provider" => {"type" => "upcloud"}
+        }
+        File.write(config_path, config.to_yaml)
+
+        # Create custom Dockerfile
+        custom_dockerfile = File.join(temp_dir, "custom", "Dockerfile")
+        FileUtils.mkdir_p(File.dirname(custom_dockerfile))
+        File.write(custom_dockerfile, "FROM ruby:3.2\n")
+
+        # Mock builder
+        builder = instance_double(Kamal::Dev::Builder)
+        allow(Kamal::Dev::Builder).to receive(:new).and_return(builder)
+        allow(builder).to receive(:docker_available?).and_return(true)
+        allow(builder).to receive(:login).and_return(true)
+        allow(builder).to receive(:build).and_return("ghcr.io/myorg/myapp:123")
+        allow(builder).to receive(:push).and_return(true)
+
+        # Mock registry
+        registry = instance_double(Kamal::Dev::Registry)
+        allow(Kamal::Dev::Registry).to receive(:new).and_return(registry)
+        allow(registry).to receive(:credentials_present?).and_return(true)
+        allow(registry).to receive(:server).and_return("ghcr.io")
+
+        # Run with CLI overrides
+        output = capture_stdout do
+          described_class.start([
+            "build",
+            "--config", config_path,
+            "--dockerfile", "custom/Dockerfile",
+            "--context", "custom"
+          ])
+        end
+
+        # Verify CLI options override config
+        expect(builder).to have_received(:build).with(
+          hash_including(
+            dockerfile: "custom/Dockerfile",
+            context: "custom"
+          )
+        )
+
+        expect(output).to include("Dockerfile: custom/Dockerfile")
+        expect(output).to include("Context: custom")
+      end
+    end
+
+    context "error handling" do
+      it "exits with error when Docker not available" do
+        config = {
+          "service" => "myapp",
+          "image" => "myorg/myapp",
+          "build" => {"dockerfile" => "Dockerfile"},
+          "registry" => {
+            "server" => "ghcr.io",
+            "username" => "GITHUB_USER",
+            "password" => "GITHUB_TOKEN"
+          },
+          "provider" => {"type" => "upcloud"}
+        }
+        File.write(config_path, config.to_yaml)
+
+        # Mock builder with Docker unavailable
+        builder = instance_double(Kamal::Dev::Builder)
+        allow(Kamal::Dev::Builder).to receive(:new).and_return(builder)
+        allow(builder).to receive(:docker_available?).and_return(false)
+
+        # Mock registry
+        registry = instance_double(Kamal::Dev::Registry)
+        allow(Kamal::Dev::Registry).to receive(:new).and_return(registry)
+        allow(registry).to receive(:credentials_present?).and_return(true)
+
+        # Expect exit
+        expect {
+          capture_stdout do
+            described_class.start(["build", "--config", config_path])
+          end
+        }.to raise_error(SystemExit)
+      end
+
+      it "exits with error when registry credentials missing" do
+        ENV.delete("GITHUB_USER")
+        ENV.delete("GITHUB_TOKEN")
+
+        config = {
+          "service" => "myapp",
+          "image" => "myorg/myapp",
+          "build" => {"dockerfile" => "Dockerfile"},
+          "registry" => {
+            "server" => "ghcr.io",
+            "username" => "GITHUB_USER",
+            "password" => "GITHUB_TOKEN"
+          },
+          "provider" => {"type" => "upcloud"}
+        }
+        File.write(config_path, config.to_yaml)
+
+        # Mock builder
+        builder = instance_double(Kamal::Dev::Builder)
+        allow(Kamal::Dev::Builder).to receive(:new).and_return(builder)
+        allow(builder).to receive(:docker_available?).and_return(true)
+
+        # Mock registry with missing credentials
+        registry = instance_double(Kamal::Dev::Registry)
+        allow(Kamal::Dev::Registry).to receive(:new).and_return(registry)
+        allow(registry).to receive(:credentials_present?).and_return(false)
+
+        # Expect exit
+        expect {
+          capture_stdout do
+            described_class.start(["build", "--config", config_path])
+          end
+        }.to raise_error(SystemExit)
+      end
+    end
+  end
+
   def capture_stdout
     old_stdout = $stdout
     $stdout = StringIO.new

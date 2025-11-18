@@ -67,8 +67,45 @@ RSpec.describe Kamal::Dev::Registry do
     end
   end
 
+  describe "#full_image_name" do
+    it "prepends registry to short image path" do
+      image = registry.full_image_name("myorg/myapp")
+      expect(image).to eq("ghcr.io/myorg/myapp")
+    end
+
+    it "prepends registry to bare image name" do
+      image = registry.full_image_name("myapp")
+      expect(image).to eq("ghcr.io/myapp")
+    end
+
+    it "does not prepend registry when already present" do
+      image = registry.full_image_name("ghcr.io/myorg/myapp")
+      expect(image).to eq("ghcr.io/myorg/myapp")
+    end
+
+    it "detects registry in first path component with dot" do
+      image = registry.full_image_name("docker.io/library/ruby")
+      expect(image).to eq("docker.io/library/ruby")
+    end
+
+    it "detects custom registry domains" do
+      image = registry.full_image_name("my-registry.com/myorg/myapp")
+      expect(image).to eq("my-registry.com/myorg/myapp")
+    end
+
+    it "handles localhost registries" do
+      image = registry.full_image_name("localhost:5000/myapp")
+      expect(image).to eq("localhost:5000/myapp")
+    end
+
+    it "prepends registry for paths without registry" do
+      image = registry.full_image_name("myorg/myapp/variant")
+      expect(image).to eq("ghcr.io/myorg/myapp/variant")
+    end
+  end
+
   describe "#image_name" do
-    it "generates image name without tag" do
+    it "generates image name without tag (deprecated format)" do
       image = registry.image_name("myapp")
       expect(image).to eq("ghcr.io/testuser/myapp-dev")
     end
@@ -88,27 +125,51 @@ RSpec.describe Kamal::Dev::Registry do
   end
 
   describe "#image_tag" do
-    it "generates full image reference with tag" do
-      image = registry.image_tag("myapp", "abc123")
-      expect(image).to eq("ghcr.io/testuser/myapp-dev:abc123")
+    context "with service name (backward compatibility)" do
+      it "generates full image reference with tag" do
+        image = registry.image_tag("myapp", "abc123")
+        expect(image).to eq("ghcr.io/testuser/myapp-dev:abc123")
+      end
+
+      it "works with timestamp tags" do
+        image = registry.image_tag("myapp", "1700000000")
+        expect(image).to eq("ghcr.io/testuser/myapp-dev:1700000000")
+      end
+
+      it "works with git SHA tags" do
+        image = registry.image_tag("myapp", "abc123f")
+        expect(image).to eq("ghcr.io/testuser/myapp-dev:abc123f")
+      end
+
+      it "raises error when username not configured" do
+        ENV.delete("GITHUB_USER")
+
+        expect {
+          registry.image_tag("myapp", "latest")
+        }.to raise_error(Kamal::Dev::RegistryError, /Registry username not configured/)
+      end
     end
 
-    it "works with timestamp tags" do
-      image = registry.image_tag("myapp", "1700000000")
-      expect(image).to eq("ghcr.io/testuser/myapp-dev:1700000000")
-    end
+    context "with full image path (new format)" do
+      it "adds tag to short image path with registry inference" do
+        image = registry.image_tag("myorg/myapp", "abc123")
+        expect(image).to eq("ghcr.io/myorg/myapp:abc123")
+      end
 
-    it "works with git SHA tags" do
-      image = registry.image_tag("myapp", "abc123f")
-      expect(image).to eq("ghcr.io/testuser/myapp-dev:abc123f")
-    end
+      it "adds tag to image with explicit registry" do
+        image = registry.image_tag("ghcr.io/myorg/myapp", "abc123")
+        expect(image).to eq("ghcr.io/myorg/myapp:abc123")
+      end
 
-    it "raises error when username not configured" do
-      ENV.delete("GITHUB_USER")
+      it "handles custom registries" do
+        image = registry.image_tag("docker.io/myorg/myapp", "latest")
+        expect(image).to eq("docker.io/myorg/myapp:latest")
+      end
 
-      expect {
-        registry.image_tag("myapp", "latest")
-      }.to raise_error(Kamal::Dev::RegistryError, /Registry username not configured/)
+      it "handles bare image names" do
+        image = registry.image_tag("myapp", "v1.0.0")
+        expect(image).to eq("ghcr.io/testuser/myapp-dev:v1.0.0")
+      end
     end
   end
 
