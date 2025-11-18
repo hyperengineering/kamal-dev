@@ -847,12 +847,20 @@ module Kamal
             return
           end
 
+          # Debug output
+          if ENV["DEBUG"]
+            puts "DEBUG: Registry class: #{registry.class}"
+            puts "DEBUG: Server: #{registry.server.inspect} (#{registry.server.class})"
+            puts "DEBUG: Username: #{registry.username.inspect} (#{registry.username.class})"
+            puts "DEBUG: Password length: #{registry.password.to_s.length} (#{registry.password.class})"
+          end
+
           on(prepare_hosts(ips)) do
             # Use --password-stdin for secure password transmission
             # Properly escape shell arguments to avoid injection
-            password_escaped = Shellwords.escape(registry.password)
-            username_escaped = Shellwords.escape(registry.username)
-            server_escaped = Shellwords.escape(registry.server)
+            password_escaped = Shellwords.escape(registry.password.to_s)
+            username_escaped = Shellwords.escape(registry.username.to_s)
+            server_escaped = Shellwords.escape(registry.server.to_s)
 
             execute "sh", "-c", "echo #{password_escaped} | docker login #{server_escaped} -u #{username_escaped} --password-stdin"
           end
