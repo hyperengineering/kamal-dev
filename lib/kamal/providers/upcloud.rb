@@ -203,6 +203,7 @@ module Kamal
             title: config[:title] || "kamal-dev-vm",
             hostname: "#{config[:title] || "kamal-dev-vm"}.local",
             plan: config[:plan],
+            metadata: "yes", # Required for cloud-init templates
             storage_devices: {
               storage_device: [
                 {
