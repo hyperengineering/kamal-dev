@@ -229,11 +229,25 @@ module Kamal
         response.body["server"] || response.body
       end
 
-      # Extract public IP address from server data
+      # Extract public IPv4 address from server data
+      # Prefers IPv4 over IPv6 for broader network compatibility
       def extract_ip_address(server_data)
         ip_addresses = server_data.dig("ip_addresses", "ip_address") || []
-        public_ip = ip_addresses.find { |ip| ip["access"] == "public" }
-        public_ip&.fetch("address") || ip_addresses.first&.fetch("address")
+
+        # Priority 1: Public IPv4 address
+        ipv4_public = ip_addresses.find { |ip| ip["access"] == "public" && ip["family"] == "IPv4" }
+        return ipv4_public["address"] if ipv4_public
+
+        # Priority 2: Any IPv4 address
+        ipv4_any = ip_addresses.find { |ip| ip["family"] == "IPv4" }
+        return ipv4_any["address"] if ipv4_any
+
+        # Priority 3: Public IPv6 address (fallback)
+        ipv6_public = ip_addresses.find { |ip| ip["access"] == "public" && ip["family"] == "IPv6" }
+        return ipv6_public["address"] if ipv6_public
+
+        # Priority 4: Any IP address (last resort)
+        ip_addresses.first&.fetch("address")
       end
 
       # Poll VM status until running or timeout

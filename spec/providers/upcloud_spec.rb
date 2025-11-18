@@ -56,7 +56,7 @@ RSpec.describe Kamal::Providers::Upcloud do
                 state: "started",
                 ip_addresses: {
                   ip_address: [
-                    {address: "1.2.3.4", access: "public"}
+                    {address: "1.2.3.4", access: "public", family: "IPv4"}
                   ]
                 }
               }
@@ -96,7 +96,7 @@ RSpec.describe Kamal::Providers::Upcloud do
                 state: "maintenance",
                 ip_addresses: {
                   ip_address: [
-                    {address: "1.2.3.5", access: "public"}
+                    {address: "1.2.3.5", access: "public", family: "IPv4"}
                   ]
                 }
               }
@@ -272,6 +272,196 @@ RSpec.describe Kamal::Providers::Upcloud do
       result = provider.estimate_cost(vm_config)
 
       expect(result[:pricing_url]).to eq("https://upcloud.com/pricing")
+    end
+
+    # Regression test: Bug fixed 2025-11-18
+    # Cost estimate was showing blank plan/zone because it expected symbol keys
+    # but config.provider returns string keys
+    context "with string keys (real usage from config.provider)" do
+      let(:string_key_config) do
+        {
+          "zone" => "de-fra1",
+          "plan" => "2xCPU-4GB"
+        }
+      end
+
+      it "handles string keys correctly" do
+        result = provider.estimate_cost(string_key_config)
+
+        expect(result[:plan]).to eq("2xCPU-4GB")
+        expect(result[:zone]).to eq("de-fra1")
+        expect(result[:warning]).to include("2xCPU-4GB")
+        expect(result[:warning]).to include("de-fra1")
+      end
+    end
+
+    context "with symbol keys (test usage)" do
+      it "handles symbol keys correctly" do
+        result = provider.estimate_cost(vm_config)
+
+        expect(result[:plan]).to eq("1xCPU-2GB")
+        expect(result[:zone]).to eq("us-nyc1")
+      end
+    end
+  end
+
+  # Regression tests for UpCloud cloud-init template requirements
+  # Bugs fixed during deployment testing 2025-11-18
+  describe "server specification for cloud-init templates" do
+    let(:server_spec) do
+      provider.send(:build_server_spec, vm_config)
+    end
+
+    # Regression test: Bug fixed 2025-11-18
+    # UpCloud API returned METADATA_DISABLED_ON_CLOUD-INIT error
+    # Cloud-init templates require metadata: "yes" to be set
+    it "includes metadata: yes for cloud-init support" do
+      expect(server_spec[:server][:metadata]).to eq("yes")
+    end
+
+    # Regression test: Bug fixed 2025-11-18
+    # UpCloud API returned STORAGE_INVALID error when using template name
+    # Must use UUID instead of template title
+    it "uses UUID for storage template (not title)" do
+      storage = server_spec[:server][:storage_devices][:storage_device].first
+      template = storage[:storage]
+
+      # Verify it's a UUID format (8-4-4-4-12 hex digits)
+      expect(template).to match(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+    end
+
+    it "uses Ubuntu 24.04 LTS UUID by default" do
+      storage = server_spec[:server][:storage_devices][:storage_device].first
+      # Verified from UpCloud API 2025-11-18
+      expect(storage[:storage]).to eq("01000000-0000-4000-8000-000030240200")
+    end
+
+    it "allows custom storage template override" do
+      custom_config = vm_config.merge(storage_template: "01000000-0000-4000-8000-000030220200")
+      spec = provider.send(:build_server_spec, custom_config)
+      storage = spec[:server][:storage_devices][:storage_device].first
+
+      expect(storage[:storage]).to eq("01000000-0000-4000-8000-000030220200")
+    end
+  end
+
+  # Regression test: Verify constant is in correct format
+  describe "DEFAULT_UBUNTU_TEMPLATE constant" do
+    it "is a valid UUID format" do
+      expect(described_class::DEFAULT_UBUNTU_TEMPLATE)
+        .to match(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+    end
+
+    it "matches Ubuntu 24.04 LTS UUID from UpCloud API" do
+      # Verified from spec/fixtures/providers/upcloud/storages-20251118.json
+      expect(described_class::DEFAULT_UBUNTU_TEMPLATE).to eq("01000000-0000-4000-8000-000030240200")
+    end
+  end
+
+  # Regression tests for IPv4 preference over IPv6
+  # Bug fixed during deployment testing 2025-11-18
+  # VMs were getting IPv6 addresses which aren't universally routable
+  describe "IP address extraction priority" do
+    let(:server_data_with_both_ips) do
+      {
+        "ip_addresses" => {
+          "ip_address" => [
+            {
+              "address" => "2a04:3540:1000:310:4c20:1fff:fed9:3693",
+              "access" => "public",
+              "family" => "IPv6"
+            },
+            {
+              "address" => "94.237.65.123",
+              "access" => "public",
+              "family" => "IPv4"
+            }
+          ]
+        }
+      }
+    end
+
+    # Regression test: Bug fixed 2025-11-18
+    # Network unreachable error with IPv6 address
+    # Many networks don't support IPv6, so prefer IPv4
+    it "prefers IPv4 over IPv6 when both are available" do
+      ip = provider.send(:extract_ip_address, server_data_with_both_ips)
+      expect(ip).to eq("94.237.65.123")
+      expect(ip).not_to include(":")
+    end
+
+    it "returns IPv4 even when IPv6 is listed first" do
+      ip = provider.send(:extract_ip_address, server_data_with_both_ips)
+      # Verify it's IPv4 format (no colons)
+      expect(ip).to match(/\A\d+\.\d+\.\d+\.\d+\z/)
+    end
+
+    context "with only IPv6 available" do
+      let(:ipv6_only_data) do
+        {
+          "ip_addresses" => {
+            "ip_address" => [
+              {
+                "address" => "2a04:3540:1000:310::1",
+                "access" => "public",
+                "family" => "IPv6"
+              }
+            ]
+          }
+        }
+      end
+
+      it "falls back to IPv6 when no IPv4 available" do
+        ip = provider.send(:extract_ip_address, ipv6_only_data)
+        expect(ip).to eq("2a04:3540:1000:310::1")
+      end
+    end
+
+    context "with mixed access levels" do
+      let(:mixed_access_data) do
+        {
+          "ip_addresses" => {
+            "ip_address" => [
+              {
+                "address" => "10.0.0.5",
+                "access" => "private",
+                "family" => "IPv4"
+              },
+              {
+                "address" => "94.237.65.200",
+                "access" => "public",
+                "family" => "IPv4"
+              }
+            ]
+          }
+        }
+      end
+
+      it "prefers public IPv4 over private IPv4" do
+        ip = provider.send(:extract_ip_address, mixed_access_data)
+        expect(ip).to eq("94.237.65.200")
+      end
+    end
+
+    context "with private IPv4 only" do
+      let(:private_ipv4_data) do
+        {
+          "ip_addresses" => {
+            "ip_address" => [
+              {
+                "address" => "10.0.0.5",
+                "access" => "private",
+                "family" => "IPv4"
+              }
+            ]
+          }
+        }
+      end
+
+      it "returns private IPv4 when it's the only IPv4 available" do
+        ip = provider.send(:extract_ip_address, private_ipv4_data)
+        expect(ip).to eq("10.0.0.5")
+      end
     end
   end
 end
