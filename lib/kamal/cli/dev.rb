@@ -224,8 +224,12 @@ module Kamal
         puts
 
         # Step 1: Check if using Docker Compose
-        devcontainer_path = config.devcontainer_json? ? config.image : options[:from]
-        parser = DevcontainerParser.new(devcontainer_path)
+        # For new format: use build.devcontainer path
+        # For old format: use image path (backward compatibility)
+        devcontainer_path = config.build_source_path || config.image
+        devcontainer_path = options[:from] if options[:from] != ".devcontainer/devcontainer.json" # CLI override
+
+        parser = Kamal::Dev::DevcontainerParser.new(devcontainer_path)
         uses_compose = parser.uses_compose?
 
         if uses_compose
