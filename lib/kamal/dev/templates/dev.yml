@@ -39,9 +39,10 @@ provider:
   type: upcloud              # Cloud provider (currently: upcloud)
   zone: us-nyc1              # Data center location (upcloud zones: us-nyc1, de-fra1, uk-lon1, etc.)
   plan: 1xCPU-2GB            # VM plan/size (upcloud plans: 1xCPU-1GB, 1xCPU-2GB, 2xCPU-4GB, etc.)
-  # storage_template: "Ubuntu Server 24.04 LTS (Noble Numbat)"  # OS template (optional - uses Ubuntu 24.04 LTS by default)
-                                                                     # Alternative: "Ubuntu Server 22.04 LTS (Jammy Jellyfish)"
-                                                                     # Can also use UUID from UpCloud console if needed
+  # storage_template: "01000000-0000-4000-8000-000030220200"  # OS template UUID (optional - defaults to Ubuntu 24.04 LTS)
+                                                                     # Ubuntu 24.04 LTS: 01000000-0000-4000-8000-000030240200 (default)
+                                                                     # Ubuntu 22.04 LTS: 01000000-0000-4000-8000-000030220200
+                                                                     # Find UUIDs in UpCloud control panel under Templates
 
 # Secrets to inject from .kamal/secrets file
 # These will be loaded and injected as Base64-encoded environment variables
