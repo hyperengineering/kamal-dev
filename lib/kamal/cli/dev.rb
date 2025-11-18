@@ -882,8 +882,25 @@ module Kamal
           ssh_key_path = File.expand_path(load_config.ssh_key_path)
 
           unless File.exist?(ssh_key_path)
-            raise "SSH public key not found at #{ssh_key_path}. " \
-                  "Configure ssh.key_path in config/dev.yml or generate an SSH key."
+            puts "❌ SSH public key not found"
+            puts
+            puts "Expected location: #{ssh_key_path}"
+            puts
+            puts "To fix this issue, choose one of the following:"
+            puts
+            puts "Option 1: Generate a new SSH key pair"
+            puts "  ssh-keygen -t ed25519 -C \"kamal-dev@#{ENV["USER"]}\" -f ~/.ssh/id_rsa"
+            puts "  (Press Enter to accept defaults)"
+            puts
+            puts "Option 2: Use an existing SSH key"
+            puts "  Add to config/dev.yml:"
+            puts "  ssh:"
+            puts "    key_path: ~/.ssh/id_ed25519.pub  # Path to your public key"
+            puts
+            puts "Option 3: Copy existing key to default location"
+            puts "  cp ~/.ssh/your_existing_key.pub ~/.ssh/id_rsa.pub"
+            puts
+            exit 1
           end
 
           File.read(ssh_key_path).strip

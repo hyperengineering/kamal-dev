@@ -31,7 +31,18 @@ module Kamal
       API_VERSION = "1.3"
       POLLING_INTERVAL = 5 # seconds
       POLLING_TIMEOUT = 120 # seconds
-      UBUNTU_TEMPLATE = "01000000-0000-4000-8000-000030200200" # Ubuntu 22.04
+
+      # UpCloud storage template for Ubuntu 24.04 LTS (latest LTS)
+      # Using template TITLE instead of UUID for cross-zone compatibility
+      # UpCloud API accepts both UUIDs and titles
+      # See: https://developers.upcloud.com/1.3/7-templates/
+      #
+      # Available Ubuntu templates:
+      #   - "Ubuntu Server 24.04 LTS (Noble Numbat)" - UUID: 01000000-0000-4000-8000-000030240200
+      #   - "Ubuntu Server 22.04 LTS (Jammy Jellyfish)" - UUID: 01000000-0000-4000-8000-000030220200
+      #
+      # Note: Template UUIDs are universal (same across all UpCloud zones)
+      DEFAULT_UBUNTU_TEMPLATE = "Ubuntu Server 24.04 LTS (Noble Numbat)"
 
       # Initialize UpCloud provider with credentials
       #
@@ -181,6 +192,11 @@ module Kamal
 
       # Build UpCloud server specification from config
       def build_server_spec(config)
+        # Determine storage template
+        # Priority: 1) config override, 2) default Ubuntu template name
+        # Template names work across all UpCloud zones (UUIDs are zone-specific)
+        storage_template = config[:storage_template] || DEFAULT_UBUNTU_TEMPLATE
+
         {
           server: {
             zone: config[:zone],
@@ -191,9 +207,9 @@ module Kamal
               storage_device: [
                 {
                   action: "clone",
-                  storage: UBUNTU_TEMPLATE,
+                  storage: storage_template,
                   title: "#{config[:title]}-disk",
-                  size: 25 # GB
+                  size: config[:disk_size] || 25 # GB
                 }
               ]
             },
