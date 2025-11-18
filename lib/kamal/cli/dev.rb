@@ -386,6 +386,12 @@ module Kamal
           puts "✓ Docker and Compose installed on all VMs"
           puts
 
+          # Login to registry on remote VMs
+          puts "Logging into container registry on #{vms.size} VM(s)..."
+          login_to_registry(vms.map { |vm| vm[:ip] }, registry)
+          puts "✓ Registry login successful"
+          puts
+
           # Deploy compose stacks to each VM
           deployed_vms = []
 
@@ -822,6 +828,29 @@ module Kamal
                 raise Kamal::Dev::ConfigurationError, "Docker Compose v2 installation failed. Please install manually."
               end
             end
+          end
+        end
+
+        # Login to container registry on remote VMs
+        #
+        # Authenticates Docker on remote VMs with the configured registry.
+        # Required before pulling private images in compose deployments.
+        #
+        # @param ips [Array<String>] VM IP addresses
+        # @param registry [Kamal::Dev::Registry] Registry configuration
+        def login_to_registry(ips, registry)
+          unless registry.credentials_present?
+            puts "⚠️  Warning: Registry credentials not configured, skipping login"
+            puts "   Private image pulls may fail without authentication"
+            return
+          end
+
+          on(prepare_hosts(ips)) do
+            # Use docker login command with credentials
+            execute "docker", "login",
+              registry.server,
+              "-u", registry.username,
+              "-p", registry.password
           end
         end
 
