@@ -98,8 +98,37 @@ module Kamal
 
         # Determine build source from config or options
         # Priority: CLI options > config.build > defaults
-        dockerfile = options[:dockerfile] || config.build["dockerfile"] || "Dockerfile"
-        context = options[:context] || config.build_context
+        dockerfile = options[:dockerfile]
+        context = options[:context]
+
+        # If not provided via CLI, check config
+        unless dockerfile && context
+          if config.build_source_type == :devcontainer
+            # Parse devcontainer.json to get Dockerfile and context
+            devcontainer_path = config.build_source_path
+            parser = Kamal::Dev::DevcontainerParser.new(devcontainer_path)
+
+            if parser.uses_compose?
+              # Extract from compose file
+              compose_file = parser.compose_file_path
+              compose_parser = Kamal::Dev::ComposeParser.new(compose_file)
+              main_service = compose_parser.main_service
+
+              dockerfile ||= compose_parser.service_dockerfile(main_service)
+              context ||= compose_parser.service_build_context(main_service)
+            else
+              # For non-compose devcontainers, this will be implemented later
+              raise Kamal::Dev::ConfigurationError, "Non-compose devcontainer builds not yet supported. Use build.dockerfile instead."
+            end
+          elsif config.build_source_type == :dockerfile
+            dockerfile ||= config.build["dockerfile"]
+            context ||= config.build_context
+          else
+            dockerfile ||= "Dockerfile"
+            context ||= "."
+          end
+        end
+
         tag = options[:tag]
 
         puts "Building image..."
