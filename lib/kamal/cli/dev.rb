@@ -3,6 +3,7 @@
 require "thor"
 require "json"
 require "yaml"
+require "shellwords"
 require "net/ssh"
 require "sshkit"
 require "sshkit/dsl"
@@ -835,6 +836,7 @@ module Kamal
         #
         # Authenticates Docker on remote VMs with the configured registry.
         # Required before pulling private images in compose deployments.
+        # Uses --password-stdin for secure password transmission.
         #
         # @param ips [Array<String>] VM IP addresses
         # @param registry [Kamal::Dev::Registry] Registry configuration
@@ -846,11 +848,13 @@ module Kamal
           end
 
           on(prepare_hosts(ips)) do
-            # Use docker login command with credentials
-            execute "docker", "login",
-              registry.server,
-              "-u", registry.username,
-              "-p", registry.password
+            # Use --password-stdin for secure password transmission
+            # Properly escape shell arguments to avoid injection
+            password_escaped = Shellwords.escape(registry.password)
+            username_escaped = Shellwords.escape(registry.username)
+            server_escaped = Shellwords.escape(registry.server)
+
+            execute "sh", "-c", "echo #{password_escaped} | docker login #{server_escaped} -u #{username_escaped} --password-stdin"
           end
         end
 
