@@ -354,17 +354,23 @@ module Kamal
             return unless confirm_deployment
           end
 
-          # Provision VMs
+          # Provision or reuse VMs
           puts "Provisioning #{count} VM(s)..."
           vms = provision_vms(config, count)
-          puts "✓ Provisioned #{vms.size} VM(s)"
+          puts "✓ #{vms.size} VM(s) ready"
           puts
 
           # Save VM state immediately (before bootstrap) to track orphaned VMs
+          # Only save NEW VMs that don't already have state
           state_manager = get_state_manager
+          existing_state = state_manager.read_state
+          deployments_data = existing_state.fetch("deployments", {})
 
           vms.each_with_index do |vm, idx|
-            vm_name = "#{config.service}-#{idx + 1}"
+            vm_name = vm[:name] || "#{config.service}-#{idx + 1}"
+            # Skip if this VM already has state (reused VM)
+            next if deployments_data.key?(vm_name)
+
             state_manager.add_compose_deployment(vm_name, vm[:id], vm[:ip], [])
           end
 
@@ -467,20 +473,24 @@ module Kamal
             return unless confirm_deployment
           end
 
-          # Provision VMs
+          # Provision or reuse VMs
           puts "Provisioning #{count} VM(s)..."
           vms = provision_vms(config, count)
-          puts "✓ Provisioned #{vms.size} VM(s)"
+          puts "✓ #{vms.size} VM(s) ready"
           puts
 
           # Save VM state immediately (before bootstrap) to track orphaned VMs
+          # Only save NEW VMs that don't already have state
           state_manager = get_state_manager
           existing_state = state_manager.read_state
           deployments_data = existing_state.fetch("deployments", {})
           next_index = find_next_index(deployments_data, config.service)
 
           vms.each_with_index do |vm, idx|
-            container_name = config.container_name(next_index + idx)
+            # Skip if this VM already has state (reused VM)
+            next if vm[:name] && deployments_data.key?(vm[:name])
+
+            container_name = vm[:name] || config.container_name(next_index + idx)
             deployment = {
               name: container_name,
               vm_id: vm[:id],
@@ -787,9 +797,10 @@ module Kamal
         def bootstrap_docker(ips)
           on(prepare_hosts(ips)) do
             # Check if Docker is already installed
+            # Note: execute with raise_on_non_zero_exit: false returns false on failure
             docker_installed = execute("command", "-v", "docker", raise_on_non_zero_exit: false)
 
-            if docker_installed.nil? || docker_installed.empty?
+            unless docker_installed && !docker_installed.to_s.strip.empty?
               puts "Installing Docker..."
               execute "curl", "-fsSL", "https://get.docker.com", "|", "sh"
               execute "systemctl", "start", "docker"
@@ -799,7 +810,7 @@ module Kamal
             # Check if Docker Compose v2 is installed
             compose_installed = execute("docker", "compose", "version", raise_on_non_zero_exit: false)
 
-            if compose_installed.nil? || compose_installed.empty?
+            unless compose_installed && !compose_installed.to_s.strip.empty?
               puts "Installing Docker Compose v2..."
               # Install docker-compose-plugin (works on Ubuntu/Debian)
               execute "apt-get", "update", raise_on_non_zero_exit: false
@@ -807,7 +818,7 @@ module Kamal
 
               # Verify installation succeeded
               compose_check = execute("docker", "compose", "version", raise_on_non_zero_exit: false)
-              if compose_check.nil? || compose_check.empty?
+              unless compose_check && !compose_check.to_s.strip.empty?
                 raise Kamal::Dev::ConfigurationError, "Docker Compose v2 installation failed. Please install manually."
               end
             end
@@ -833,7 +844,9 @@ module Kamal
         def stop_container(ip, container_name)
           on(prepare_hosts([ip])) do
             # Check if container is running
-            running = capture("docker", "ps", "-q", "-f", "name=#{container_name}", raise_on_non_zero_exit: false).strip
+            # Note: capture with raise_on_non_zero_exit: false may return false on failure
+            running = capture("docker", "ps", "-q", "-f", "name=#{container_name}", raise_on_non_zero_exit: false)
+            running = running.to_s.strip if running
             if running && !running.empty?
               execute "docker", "stop", container_name
             end
@@ -905,42 +918,68 @@ module Kamal
           response == "y" || response == "yes"
         end
 
-        # Provision VMs via cloud provider
+        # Provision or reuse VMs for deployment
         #
-        # Provisions specified number of VMs sequentially, displaying progress dots.
-        # Each VM is configured with zone, plan, title, and SSH key from config.
+        # Checks state file for existing VMs and reuses them if available.
+        # Only provisions NEW VMs if needed to reach desired count.
         #
         # @param config [Kamal::Dev::Config] Deployment configuration
-        # @param count [Integer] Number of VMs to provision
+        # @param count [Integer] Number of VMs needed
         # @return [Array<Hash>] Array of VM details, each containing:
         #   - :id [String] VM identifier (UUID)
         #   - :ip [String] Public IP address
         #   - :status [Symbol] VM status (:running, :pending, etc.)
         #
+        # @note Reuses existing VMs from state file before provisioning new ones
         # @note Currently provisions VMs sequentially. Batching for count > 5 is TODO.
-        # @note Displays progress dots during provisioning
         def provision_vms(config, count)
-          provider = get_provider(config)
-          vms = []
+          state_manager = get_state_manager
+          existing_state = state_manager.read_state
+          deployments = existing_state.fetch("deployments", {})
 
-          # TODO: Implement batching for count > 5 (as per tech spec)
-          # For now, provision sequentially
-          count.times do |i|
+          # Find existing VMs for this service
+          existing_vms = deployments.select { |name, data|
+            name.start_with?(config.service)
+          }.map { |name, data|
+            {
+              id: data["vm_id"],
+              ip: data["vm_ip"],
+              status: :running,
+              name: name
+            }
+          }
+
+          if existing_vms.size >= count
+            puts "Found #{existing_vms.size} existing VM(s), reusing #{count}"
+            return existing_vms.first(count)
+          end
+
+          # Need to provision additional VMs
+          needed = count - existing_vms.size
+          provider = get_provider(config)
+          new_vms = []
+
+          puts "Found #{existing_vms.size} existing VM(s), provisioning #{needed} more..." if existing_vms.any?
+
+          needed.times do |i|
+            vm_index = existing_vms.size + i + 1
             vm_config = {
               zone: config.provider["zone"],
               plan: config.provider["plan"],
-              title: "#{config.service}-vm-#{i + 1}",
+              title: "#{config.service}-vm-#{vm_index}",
               ssh_key: load_ssh_key
             }
 
             vm = provider.provision_vm(vm_config)
-            vms << vm
+            new_vms << vm
 
             print "."
           end
 
           puts # Newline after progress dots
-          vms
+
+          # Return combination of existing and new VMs
+          existing_vms + new_vms
         end
 
         # Load SSH public key for VM provisioning
