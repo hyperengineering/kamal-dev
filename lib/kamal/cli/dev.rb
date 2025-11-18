@@ -841,29 +841,35 @@ module Kamal
         # @param ips [Array<String>] VM IP addresses
         # @param registry [Kamal::Dev::Registry] Registry configuration
         def login_to_registry(ips, registry)
+          puts "DEBUG: Entering login_to_registry"
+          puts "DEBUG: IPs: #{ips.inspect}"
+          puts "DEBUG: Registry: #{registry.inspect}"
+
           unless registry.credentials_present?
             puts "⚠️  Warning: Registry credentials not configured, skipping login"
             puts "   Private image pulls may fail without authentication"
             return
           end
 
-          # Debug output
-          if ENV["DEBUG"]
-            puts "DEBUG: Registry class: #{registry.class}"
-            puts "DEBUG: Server: #{registry.server.inspect} (#{registry.server.class})"
-            puts "DEBUG: Username: #{registry.username.inspect} (#{registry.username.class})"
-            puts "DEBUG: Password length: #{registry.password.to_s.length} (#{registry.password.class})"
-          end
+          puts "DEBUG: Credentials present, proceeding..."
+          puts "DEBUG: Server: #{registry.server.inspect} (#{registry.server.class})"
+          puts "DEBUG: Username: #{registry.username.inspect} (#{registry.username.class})"
+          puts "DEBUG: Password: <hidden> (#{registry.password.class})"
+
+          # Pre-escape values BEFORE on() block
+          password_escaped = Shellwords.escape(registry.password.to_s)
+          username_escaped = Shellwords.escape(registry.username.to_s)
+          server_escaped = Shellwords.escape(registry.server.to_s)
+
+          puts "DEBUG: Escaped values prepared"
+          puts "DEBUG: About to call on() with hosts: #{prepare_hosts(ips).inspect}"
 
           on(prepare_hosts(ips)) do
             # Use --password-stdin for secure password transmission
-            # Properly escape shell arguments to avoid injection
-            password_escaped = Shellwords.escape(registry.password.to_s)
-            username_escaped = Shellwords.escape(registry.username.to_s)
-            server_escaped = Shellwords.escape(registry.server.to_s)
-
             execute "sh", "-c", "echo #{password_escaped} | docker login #{server_escaped} -u #{username_escaped} --password-stdin"
           end
+
+          puts "DEBUG: Login complete"
         end
 
         # Deploy container to VM via SSH
