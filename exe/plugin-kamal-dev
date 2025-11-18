@@ -87,11 +87,11 @@ class KamalDevInstaller
 
     # Create backup
     backup_path = "#{gem_executable}.backup"
-    unless File.exist?(backup_path)
+    if File.exist?(backup_path)
+      puts "✓ Backup already exists: #{backup_path}"
+    else
       puts "💾 Creating backup: #{backup_path}"
       FileUtils.cp(gem_executable, backup_path)
-    else
-      puts "✓ Backup already exists: #{backup_path}"
     end
 
     # Patch the executable
@@ -179,7 +179,7 @@ class KamalDevInstaller
     File.write(BINSTUB_PATH, patched_content)
 
     # Preserve executable permissions
-    File.chmod(0755, BINSTUB_PATH)
+    File.chmod(0o755, BINSTUB_PATH)
 
     @patched = true
     puts "✓ Patched #{BINSTUB_PATH}"

@@ -1,5 +1,158 @@
 ## [Unreleased]
 
+## [0.2.0] - 2025-11-18
+
+### Added - Epic 2: Docker Compose & Build Support
+
+#### Story 2.1: Registry Configuration & Image Builder Integration
+- **Registry Integration** (`Kamal::Dev::Registry`)
+  - Container registry configuration (GHCR, Docker Hub, custom registries)
+  - Credential loading from environment variables via `.kamal/secrets`
+  - Docker login command generation
+  - Image naming conventions: `{server}/{username}/{service}-dev:{tag}`
+  - Tag generation strategies:
+    - Timestamp tags (Unix timestamp)
+    - Git SHA tags (7-character short hash)
+  - Credential validation and error handling
+  - Multi-registry support (ghcr.io, docker.io, custom)
+
+- **Image Builder** (`Kamal::Dev::Builder`)
+  - Docker image building from Dockerfiles
+  - Build progress display and streaming output
+  - Build arguments support
+  - Tag management (timestamp, git SHA, custom)
+  - Image pushing to container registries
+  - Registry authentication (docker login)
+  - Docker availability checks
+  - Image existence verification
+  - Comprehensive error handling:
+    - Build failures with detailed output
+    - Push failures (authentication, network)
+    - Docker daemon availability
+
+- **CLI Commands**
+  - `kamal dev build` - Build image from Dockerfile
+    - Auto-generates timestamp tag if not provided
+    - Supports custom Dockerfile paths
+    - Build arguments via `--build-arg`
+    - Display build progress in real-time
+  - `kamal dev push` - Push image to registry
+    - Automatic registry authentication
+    - Push progress display
+    - Verification of successful push
+
+#### Story 2.2: Compose Parser & Stack Deployment
+- **Docker Compose Parser** (`Kamal::Dev::ComposeParser`)
+  - Docker Compose YAML parsing and validation
+  - Service extraction and analysis
+  - Main service identification (first with `build:` section)
+  - Build context and Dockerfile path extraction
+  - Dependent service detection (services without `build:`)
+  - Compose file transformation for deployment:
+    - Replace `build:` sections with `image:` references
+    - Preserve dependent services (postgres, redis, etc.)
+    - Preserve volumes, networks, environment variables
+    - Preserve service dependencies (`depends_on`)
+  - Support for shorthand and expanded build syntax
+  - Comprehensive error handling and validation
+
+- **Devcontainer Compose Integration**
+  - `dockerComposeFile` property support in devcontainer.json
+  - Automatic compose file detection and loading
+  - Seamless integration with existing devcontainer workflow
+
+- **Multi-Service Stack Deployment**
+  - Full compose stack deployment to each VM
+  - Isolated stacks per workspace (each gets own database/cache)
+  - Docker Compose v2 installation on VMs during bootstrap
+  - Transformed compose.yaml deployment via `docker-compose up -d`
+  - Container tracking for all services in stack
+  - Support for complex stacks (app + database + cache + worker)
+
+- **Enhanced CLI Commands**
+  - `kamal dev deploy` - Enhanced with compose support
+    - `--skip-build` flag - Use existing local image
+    - `--skip-push` flag - Use local image, don't push to registry
+    - Automatic build → push → deploy workflow
+    - Multi-service deployment tracking
+  - `kamal dev list` - Shows all containers in compose stacks
+    - Displays app containers and dependent services
+    - Status for each service in the stack
+
+#### Story 2.3: Testing & Documentation
+- **Test Coverage**
+  - 252 total test examples (110 new for Epic 2)
+  - Registry: 20 comprehensive unit tests
+  - Builder: 15 comprehensive unit tests
+  - ComposeParser: 47 comprehensive unit tests
+  - 100% test pass rate
+  - Code quality: Standard Ruby linter clean (0 violations)
+
+- **Documentation**
+  - **README.md** - Comprehensive Docker Compose support section:
+    - Registry configuration guide
+    - Building and pushing images
+    - Multi-service deployment examples
+    - Compose file requirements and limitations
+    - Troubleshooting compose deployments
+  - **docs/compose-workflow.md** - Complete workflow guide:
+    - Step-by-step deployment process
+    - Workflow diagram with visual representation
+    - Compose file transformation explained
+    - Service detection logic
+    - Multi-VM deployment architecture
+    - Examples: Rails + Postgres, Node + Mongo + Redis, Python + Celery
+    - Best practices and troubleshooting
+  - **docs/registry-setup.md** - Registry configuration guide:
+    - GitHub Container Registry (GHCR) setup
+    - Docker Hub setup
+    - Custom/private registry configuration
+    - AWS ECR, GCR, ACR integration
+    - Authentication testing procedures
+    - Security best practices
+    - Cost considerations and comparisons
+
+### Changed - Epic 2
+- Enhanced `kamal dev deploy` to support full build → push → deploy workflow
+- Updated state tracking to handle multi-service compose stacks
+- Improved error messages for registry and build failures
+
+### Technical Details - Epic 2
+- **New Dependencies**: None (uses stdlib YAML and Open3)
+- **Supported Registries**: GHCR, Docker Hub, custom Docker-compatible registries
+- **Supported Compose Features**:
+  - Services with `build:` sections
+  - Services with `image:` references
+  - Build context (string or object format)
+  - Dockerfile path specification
+  - Environment variables, volumes, ports
+  - Service dependencies (`depends_on`)
+  - Named volumes
+- **Limitations**: Single architecture builds (amd64), no shared databases across VMs
+
+### Examples - Epic 2
+
+#### Rails Application with PostgreSQL
+```yaml
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/myapp_dev
+    ports:
+      - "3000:3000"
+  postgres:
+    image: postgres:16
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:
+```
+
+Deploy: `kamal dev deploy --count 3` creates 3 isolated stacks
+
 ## [0.1.4] - 2025-11-16
 
 ### Added

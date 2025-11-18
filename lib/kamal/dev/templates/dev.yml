@@ -10,6 +10,15 @@ image: .devcontainer/devcontainer.json
 # Option 2: Use direct image reference
 # image: ruby:3.2
 
+# Container registry configuration (for building and pushing custom images)
+# Required when using Dockerfile builds
+registry:
+  server: ghcr.io                # Registry server (default: ghcr.io - GitHub Container Registry)
+                                  # Alternatives: hub.docker.com, your-custom-registry.io
+  username: GITHUB_USER           # Environment variable name for registry username
+  password: GITHUB_TOKEN          # Environment variable name for registry password/token
+                                  # For GHCR: create a Personal Access Token with write:packages scope
+
 # Cloud provider configuration
 provider:
   type: upcloud              # Cloud provider (currently: upcloud)
@@ -21,8 +30,12 @@ provider:
 secrets:
   - UPCLOUD_USERNAME         # Required: UpCloud API username
   - UPCLOUD_PASSWORD         # Required: UpCloud API password
+  # Registry credentials (required if using registry.username/password above):
+  # - GITHUB_USER            # For GitHub Container Registry (ghcr.io)
+  # - GITHUB_TOKEN           # Personal Access Token with write:packages scope
+  # - DOCKER_HUB_USERNAME    # For Docker Hub (hub.docker.com)
+  # - DOCKER_HUB_TOKEN       # Docker Hub access token
   # Add your application secrets here:
-  # - GITHUB_TOKEN
   # - DATABASE_URL
   # - API_KEY
 

@@ -9,6 +9,9 @@ require_relative "../dev/config"
 require_relative "../dev/devcontainer_parser"
 require_relative "../dev/devcontainer"
 require_relative "../dev/state_manager"
+require_relative "../dev/compose_parser"
+require_relative "../dev/registry"
+require_relative "../dev/builder"
 require_relative "../providers/upcloud"
 
 # Configure SSHKit
@@ -53,10 +56,162 @@ module Kamal
         puts
       end
 
+      desc "build", "Build image from Dockerfile and push to registry"
+      option :tag, type: :string, desc: "Custom image tag (defaults to timestamp)"
+      option :dockerfile, type: :string, default: "Dockerfile", desc: "Path to Dockerfile"
+      option :context, type: :string, default: ".", desc: "Build context path"
+      option :skip_push, type: :boolean, default: false, desc: "Skip pushing image to registry"
+      def build
+        config = load_config
+        registry = Kamal::Dev::Registry.new(config)
+        builder = Kamal::Dev::Builder.new(config, registry)
+
+        # Check Docker is available
+        unless builder.docker_available?
+          puts "❌ Error: Docker is required to build images"
+          puts "   Please install Docker Desktop or Docker Engine"
+          exit 1
+        end
+
+        # Check registry credentials
+        unless registry.credentials_present?
+          username_var = config.registry["username"]
+          password_var = config.registry["password"]
+          puts "❌ Error: Registry credentials not found"
+          puts "   Please set #{username_var} and #{password_var} in .kamal/secrets"
+          exit 1
+        end
+
+        puts "🔨 Building image for '#{config.service}'"
+        puts
+
+        # Authenticate with registry
+        puts "Authenticating with registry..."
+        begin
+          builder.login
+          puts "✓ Logged in to #{registry.server}"
+        rescue Kamal::Dev::RegistryError => e
+          puts "❌ Registry login failed: #{e.message}"
+          exit 1
+        end
+        puts
+
+        # Build image
+        tag = options[:tag]
+        dockerfile = options[:dockerfile]
+        context = options[:context]
+
+        puts "Building image..."
+        puts "  Dockerfile: #{dockerfile}"
+        puts "  Context: #{context}"
+        puts "  Tag: #{tag || "(auto-generated timestamp)"}"
+        puts
+
+        begin
+          image_ref = builder.build(
+            dockerfile: dockerfile,
+            context: context,
+            tag: tag
+          )
+          puts
+          puts "✓ Built image: #{image_ref}"
+        rescue Kamal::Dev::BuildError => e
+          puts "❌ Build failed: #{e.message}"
+          exit 1
+        end
+        puts
+
+        # Push image (unless --skip-push)
+        unless options[:skip_push]
+          puts "Pushing image to registry..."
+          begin
+            builder.push(image_ref)
+            puts
+            puts "✓ Pushed image: #{image_ref}"
+          rescue Kamal::Dev::BuildError => e
+            puts "❌ Push failed: #{e.message}"
+            exit 1
+          end
+          puts
+        end
+
+        puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        puts "✅ Build complete!"
+        puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        puts
+        puts "Image: #{image_ref}"
+        puts
+      end
+
+      desc "push IMAGE", "Push image to registry"
+      def push(image_ref = nil)
+        config = load_config
+        registry = Kamal::Dev::Registry.new(config)
+        builder = Kamal::Dev::Builder.new(config, registry)
+
+        # Use provided image or generate from config
+        image_ref ||= begin
+          puts "No image specified. Using service name from config..."
+          tag = registry.tag_with_timestamp
+          registry.image_tag(config.service, tag)
+        end
+
+        # Check Docker is available
+        unless builder.docker_available?
+          puts "❌ Error: Docker is required to push images"
+          puts "   Please install Docker Desktop or Docker Engine"
+          exit 1
+        end
+
+        # Check registry credentials
+        unless registry.credentials_present?
+          username_var = config.registry["username"]
+          password_var = config.registry["password"]
+          puts "❌ Error: Registry credentials not found"
+          puts "   Please set #{username_var} and #{password_var} in .kamal/secrets"
+          exit 1
+        end
+
+        puts "📤 Pushing image '#{image_ref}'"
+        puts
+
+        # Authenticate with registry
+        puts "Authenticating with registry..."
+        begin
+          builder.login
+          puts "✓ Logged in to #{registry.server}"
+        rescue Kamal::Dev::RegistryError => e
+          puts "❌ Registry login failed: #{e.message}"
+          exit 1
+        end
+        puts
+
+        # Push image
+        puts "Pushing image to registry..."
+        begin
+          builder.push(image_ref)
+          puts
+          puts "✓ Pushed image: #{image_ref}"
+        rescue Kamal::Dev::BuildError => e
+          puts "❌ Push failed: #{e.message}"
+          exit 1
+        end
+        puts
+
+        puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        puts "✅ Push complete!"
+        puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        puts
+        puts "Image: #{image_ref}"
+        puts
+      end
+
       desc "deploy [NAME]", "Deploy devcontainer(s)"
       option :count, type: :numeric, default: 1, desc: "Number of containers to deploy"
       option :from, type: :string, default: ".devcontainer/devcontainer.json", desc: "Path to devcontainer.json"
       option :skip_cost_check, type: :boolean, default: false, desc: "Skip cost confirmation prompt"
+      option :skip_build, type: :boolean, default: false, desc: "Skip building image (use existing)"
+      option :skip_push, type: :boolean, default: false, desc: "Skip pushing image to registry"
       def deploy(name = nil)
         config = load_config
         count = options[:count] || 1
@@ -64,73 +219,251 @@ module Kamal
         puts "🚀 Deploying #{count} devcontainer workspace(s) for '#{config.service}'"
         puts
 
-        # Step 1: Load and parse devcontainer
-        devcontainer_config = config.devcontainer
-        puts "✓ Loaded devcontainer configuration"
-        puts "  Image: #{devcontainer_config.image}"
-        puts "  Source: #{config.devcontainer_json? ? "devcontainer.json" : "direct image reference"}"
-        puts
+        # Step 1: Check if using Docker Compose
+        devcontainer_path = config.devcontainer_json? ? config.image : options[:from]
+        parser = DevcontainerParser.new(devcontainer_path)
+        uses_compose = parser.uses_compose?
 
-        # Step 2: Estimate cost and get confirmation
-        unless options[:skip_cost_check]
-          show_cost_estimate(config, count)
-          return unless confirm_deployment
+        if uses_compose
+          deploy_compose_stack(config, count, parser)
+        else
+          deploy_single_container(config, count)
         end
+      end
 
-        # Step 3: Provision VMs
-        puts "Provisioning #{count} VM(s)..."
-        vms = provision_vms(config, count)
-        puts "✓ Provisioned #{vms.size} VM(s)"
-        puts
+      no_commands do
+        # Deploy Docker Compose stacks to multiple VMs
+        #
+        # Handles full compose deployment workflow: build, push, transform, deploy
+        #
+        # @param config [Kamal::Dev::Config] Configuration object
+        # @param count [Integer] Number of VMs to deploy
+        # @param parser [Kamal::Dev::DevcontainerParser] Devcontainer parser
+        def deploy_compose_stack(config, count, parser)
+          compose_file = parser.compose_file_path
+          unless compose_file && File.exist?(compose_file)
+            raise Kamal::Dev::ConfigurationError, "Compose file not found at: #{compose_file || "unknown path"}"
+          end
 
-        # Step 4: Bootstrap Docker on VMs
-        puts "Bootstrapping Docker on #{vms.size} VM(s)..."
-        bootstrap_docker(vms.map { |vm| vm[:ip] })
-        puts "✓ Docker installed on all VMs"
-        puts
+          compose_parser = Kamal::Dev::ComposeParser.new(compose_file)
+          registry = Kamal::Dev::Registry.new(config)
+          builder = Kamal::Dev::Builder.new(config, registry)
 
-        # Step 5: Generate container names and deploy containers
-        state_manager = get_state_manager
-        existing_state = state_manager.read_state
-        deployments_data = existing_state.fetch("deployments", {})
+          # Validate main service has build section
+          unless compose_parser.main_service
+            raise Kamal::Dev::ConfigurationError, "No services found in compose file: #{compose_file}"
+          end
 
-        next_index = find_next_index(deployments_data, config.service)
+          unless options[:skip_build] || compose_parser.has_build_section?(compose_parser.main_service)
+            raise Kamal::Dev::ConfigurationError, "Main service '#{compose_parser.main_service}' has no build section. Use --skip-build with existing image."
+          end
 
-        vms.each_with_index do |vm, idx|
-          container_name = config.container_name(next_index + idx)
-          docker_command = devcontainer_config.docker_run_command(name: container_name)
-
-          # Deploy container via SSH
-          puts "Deploying #{container_name} to #{vm[:ip]}..."
-          deploy_container(vm[:ip], docker_command)
-
-          # Save deployment state
-          deployment = {
-            name: container_name,
-            vm_id: vm[:id],
-            vm_ip: vm[:ip],
-            container_name: container_name,
-            status: "running",
-            deployed_at: Time.now.utc.iso8601
-          }
-
-          state_manager.add_deployment(deployment)
-
-          puts "✓ #{container_name}"
-          puts "  VM: #{vm[:id]}"
-          puts "  IP: #{vm[:ip]}"
-          puts "  Status: running"
+          puts "✓ Detected Docker Compose deployment"
+          puts "  Compose file: #{File.basename(compose_file)}"
+          puts "  Main service: #{compose_parser.main_service}"
+          puts "  Dependent services: #{compose_parser.dependent_services.join(", ")}" unless compose_parser.dependent_services.empty?
           puts
+
+          # Build and push main service image (unless skipped)
+          if options[:skip_build]
+            # Use existing image
+            tag = options[:tag] || "latest"
+            image_ref = registry.image_tag(config.service, tag)
+            puts "Using existing image: #{image_ref}"
+            puts
+          else
+            main_service = compose_parser.main_service
+            dockerfile = compose_parser.service_dockerfile(main_service)
+            context = compose_parser.service_build_context(main_service)
+
+            puts "🔨 Building image for service '#{main_service}'"
+            tag = options[:tag] || Time.now.utc.strftime("%Y%m%d%H%M%S")
+
+            begin
+              image_ref = builder.build(dockerfile: dockerfile, context: context, tag: tag)
+              puts "✓ Built #{image_ref}"
+              puts
+            rescue => e
+              raise Kamal::Dev::BuildError, "Failed to build image: #{e.message}"
+            end
+
+            unless options[:skip_push]
+              puts "📤 Pushing #{image_ref} to registry..."
+              begin
+                builder.push(image_ref)
+                puts "✓ Pushed #{image_ref}"
+                puts
+              rescue => e
+                raise Kamal::Dev::RegistryError, "Failed to push image: #{e.message}"
+              end
+            end
+          end
+
+          # Transform compose file
+          puts "Transforming compose file..."
+          transformed_yaml = compose_parser.transform_for_deployment(image_ref)
+          puts "✓ Transformed compose.yaml (build → image)"
+          puts
+
+          # Estimate cost and get confirmation
+          unless options[:skip_cost_check]
+            show_cost_estimate(config, count)
+            return unless confirm_deployment
+          end
+
+          # Provision VMs
+          puts "Provisioning #{count} VM(s)..."
+          vms = provision_vms(config, count)
+          puts "✓ Provisioned #{vms.size} VM(s)"
+          puts
+
+          # Bootstrap Docker + Compose
+          puts "Bootstrapping Docker and Compose on #{vms.size} VM(s)..."
+          bootstrap_docker(vms.map { |vm| vm[:ip] })
+          puts "✓ Docker and Compose installed on all VMs"
+          puts
+
+          # Deploy compose stacks to each VM
+          state_manager = get_state_manager
+          deployed_vms = []
+
+          vms.each_with_index do |vm, idx|
+            vm_name = "#{config.service}-#{idx + 1}"
+            puts "Deploying compose stack to #{vm_name} (#{vm[:ip]})..."
+
+            containers = []
+
+            begin
+              on(prepare_hosts([vm[:ip]])) do
+                # Copy transformed compose file
+                upload! StringIO.new(transformed_yaml), "/root/compose.yaml"
+
+                # Deploy stack
+                execute "docker", "compose", "-f", "/root/compose.yaml", "up", "-d"
+
+                # Get container information
+                containers_json = capture("docker", "compose", "-f", "/root/compose.yaml", "ps", "--format", "json")
+
+                # Parse container information
+                containers_json.each_line do |line|
+                  next if line.strip.empty?
+                  container_data = JSON.parse(line.strip)
+                  containers << {
+                    name: container_data["Name"],
+                    service: container_data["Service"],
+                    image: container_data["Image"],
+                    status: container_data["State"]
+                  }
+                rescue JSON::ParserError => e
+                  warn "Warning: Failed to parse container JSON: #{e.message}"
+                end
+              end
+
+              # Save compose deployment to state
+              state_manager.add_compose_deployment(vm_name, vm[:id], vm[:ip], containers)
+              deployed_vms << vm
+
+              puts "✓ Deployed stack to #{vm_name}"
+              puts "  VM: #{vm[:id]}"
+              puts "  IP: #{vm[:ip]}"
+              puts "  Containers: #{containers.map { |c| c[:service] }.join(", ")}"
+              puts
+            rescue => e
+              warn "❌ Failed to deploy to #{vm_name}: #{e.message}"
+              puts "   VM will be cleaned up..."
+              # Continue with other VMs
+            end
+          end
+
+          # Check if any deployments succeeded
+          if deployed_vms.empty?
+            raise Kamal::Dev::DeploymentError, "All compose stack deployments failed"
+          elsif deployed_vms.size < vms.size
+            warn "⚠️  Warning: #{vms.size - deployed_vms.size} of #{vms.size} deployments failed"
+          end
+
+          puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          puts "✅ Compose deployment complete!"
+          puts
+          puts "#{count} compose stack(s) deployed and running"
+          puts
+          puts "View deployments: kamal dev list"
+          puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         end
 
-        puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        puts "✅ Deployment complete!"
-        puts
-        puts "#{count} workspace(s) deployed and running"
-        puts
-        puts "View deployments: kamal dev list"
-        puts "Connect via SSH: ssh root@<VM_IP>"
-        puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        # Deploy single containers (non-compose workflow)
+        #
+        # Original deployment flow for direct image deployments
+        #
+        # @param config [Kamal::Dev::Config] Configuration object
+        # @param count [Integer] Number of containers to deploy
+        def deploy_single_container(config, count)
+          # Load devcontainer
+          devcontainer_config = config.devcontainer
+          puts "✓ Loaded devcontainer configuration"
+          puts "  Image: #{devcontainer_config.image}"
+          puts "  Source: #{config.devcontainer_json? ? "devcontainer.json" : "direct image reference"}"
+          puts
+
+          # Estimate cost and get confirmation
+          unless options[:skip_cost_check]
+            show_cost_estimate(config, count)
+            return unless confirm_deployment
+          end
+
+          # Provision VMs
+          puts "Provisioning #{count} VM(s)..."
+          vms = provision_vms(config, count)
+          puts "✓ Provisioned #{vms.size} VM(s)"
+          puts
+
+          # Bootstrap Docker on VMs
+          puts "Bootstrapping Docker on #{vms.size} VM(s)..."
+          bootstrap_docker(vms.map { |vm| vm[:ip] })
+          puts "✓ Docker installed on all VMs"
+          puts
+
+          # Deploy containers
+          state_manager = get_state_manager
+          existing_state = state_manager.read_state
+          deployments_data = existing_state.fetch("deployments", {})
+          next_index = find_next_index(deployments_data, config.service)
+
+          vms.each_with_index do |vm, idx|
+            container_name = config.container_name(next_index + idx)
+            docker_command = devcontainer_config.docker_run_command(name: container_name)
+
+            puts "Deploying #{container_name} to #{vm[:ip]}..."
+            deploy_container(vm[:ip], docker_command)
+
+            # Save deployment state
+            deployment = {
+              name: container_name,
+              vm_id: vm[:id],
+              vm_ip: vm[:ip],
+              container_name: container_name,
+              status: "running",
+              deployed_at: Time.now.utc.iso8601
+            }
+
+            state_manager.add_deployment(deployment)
+
+            puts "✓ #{container_name}"
+            puts "  VM: #{vm[:id]}"
+            puts "  IP: #{vm[:ip]}"
+            puts "  Status: running"
+            puts
+          end
+
+          puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          puts "✅ Deployment complete!"
+          puts
+          puts "#{count} workspace(s) deployed and running"
+          puts
+          puts "View deployments: kamal dev list"
+          puts "Connect via SSH: ssh root@<VM_IP>"
+          puts "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        end
       end
 
       desc "stop [NAME]", "Stop devcontainer(s)"
@@ -345,6 +678,22 @@ module Kamal
               execute "systemctl", "start", "docker"
               execute "systemctl", "enable", "docker"
             end
+
+            # Check if Docker Compose v2 is installed
+            compose_installed = execute("docker", "compose", "version", raise_on_non_zero_exit: false)
+
+            if compose_installed.nil? || compose_installed.empty?
+              puts "Installing Docker Compose v2..."
+              # Install docker-compose-plugin (works on Ubuntu/Debian)
+              execute "apt-get", "update", raise_on_non_zero_exit: false
+              execute "apt-get", "install", "-y", "docker-compose-plugin", raise_on_non_zero_exit: false
+
+              # Verify installation succeeded
+              compose_check = execute("docker", "compose", "version", raise_on_non_zero_exit: false)
+              if compose_check.nil? || compose_check.empty?
+                raise Kamal::Dev::ConfigurationError, "Docker Compose v2 installation failed. Please install manually."
+              end
+            end
           end
         end
 
@@ -527,32 +876,68 @@ module Kamal
 
         # Print deployments in formatted table
         #
-        # Displays deployment information in a human-readable table format
-        # with columns for NAME, IP, STATUS, and DEPLOYED AT.
+        # Displays deployment information in a human-readable table format.
+        # For compose deployments, shows all containers in the stack.
         #
         # @param deployments [Hash] Hash of deployments (name => deployment_data)
         # @return [void]
         #
-        # @example Output
+        # @example Single Container Output
         #   NAME                 IP              STATUS          DEPLOYED AT
         #   ----------------------------------------------------------------------
         #   myapp-dev-1          1.2.3.4         running         2025-11-16T10:00:00Z
-        #   myapp-dev-2          1.2.3.5         running         2025-11-16T10:00:15Z
+        #
+        # @example Compose Stack Output
+        #   VM: myapp-1          IP: 1.2.3.4     DEPLOYED AT: 2025-11-16T10:00:00Z
+        #   ----------------------------------------------------------------------
+        #     ├─ app             running         ghcr.io/user/myapp:abc123
+        #     └─ postgres        running         postgres:16
         def print_table(deployments)
-          # Header
-          puts "NAME                 IP              STATUS          DEPLOYED AT         "
-          puts "-" * 70
+          state_manager = get_state_manager
 
-          # Rows
           deployments.each do |name, deployment|
-            puts format(
-              "%-20s %-15s %-15s %-20s",
-              name,
-              deployment["vm_ip"],
-              deployment["status"],
-              deployment["deployed_at"]
-            )
+            if state_manager.compose_deployment?(name)
+              # Compose deployment - show VM header and containers
+              puts ""
+              puts "VM: #{name.ljust(17)} IP: #{deployment["vm_ip"].ljust(13)} DEPLOYED AT: #{deployment["deployed_at"]}"
+              puts "-" * 80
+
+              containers = deployment["containers"]
+              containers.each_with_index do |container, idx|
+                prefix = (idx == containers.size - 1) ? "  └─" : "  ├─"
+                status_indicator = (container["status"] == "running") ? "✓" : "✗"
+                puts format(
+                  "%s %-15s  %s %-13s  %s",
+                  prefix,
+                  container["service"],
+                  status_indicator,
+                  container["status"],
+                  container["image"]
+                )
+              end
+            else
+              # Single container deployment - original format
+              if deployments.values.none? { |d| d["type"] == "compose" }
+                # Only show header once for single-container-only list
+                if name == deployments.keys.first
+                  puts "NAME                 IP              STATUS          DEPLOYED AT"
+                  puts "-" * 80
+                end
+              end
+
+              status = deployment["status"] || "unknown"
+              container_name = deployment["container_name"] || name
+              puts format(
+                "%-20s %-15s %-15s %-20s",
+                container_name,
+                deployment["vm_ip"],
+                status,
+                deployment["deployed_at"]
+              )
+            end
           end
+
+          puts "" if deployments.any?
         end
       end
     end

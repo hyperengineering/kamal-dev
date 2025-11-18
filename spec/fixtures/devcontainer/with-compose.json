@@ -1,0 +1,8 @@
+{
+  "name": "Rails Development",
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "forwardPorts": [3000],
+  "remoteUser": "vscode"
+}

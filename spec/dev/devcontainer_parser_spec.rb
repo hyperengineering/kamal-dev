@@ -126,4 +126,79 @@ RSpec.describe Kamal::Dev::DevcontainerParser do
       end
     end
   end
+
+  describe "#uses_compose?" do
+    context "with dockerComposeFile property" do
+      subject(:parser) { described_class.new(File.join(fixtures_path, "with-compose.json")) }
+
+      it "returns true" do
+        expect(parser.uses_compose?).to be true
+      end
+    end
+
+    context "with dockerComposeFile array" do
+      subject(:parser) { described_class.new(File.join(fixtures_path, "with-compose-array.json")) }
+
+      it "returns true" do
+        expect(parser.uses_compose?).to be true
+      end
+    end
+
+    context "with direct image property" do
+      subject(:parser) { described_class.new(File.join(fixtures_path, "with-image.json")) }
+
+      it "returns false" do
+        expect(parser.uses_compose?).to be false
+      end
+    end
+
+    context "with nonexistent file" do
+      subject(:parser) { described_class.new("/nonexistent/path.json") }
+
+      it "returns false" do
+        expect(parser.uses_compose?).to be false
+      end
+    end
+  end
+
+  describe "#compose_file_path" do
+    context "with dockerComposeFile property" do
+      subject(:parser) { described_class.new(File.join(fixtures_path, "with-compose.json")) }
+
+      it "returns compose file path relative to devcontainer directory" do
+        path = parser.compose_file_path
+        expect(path).to end_with("fixtures/devcontainer/compose.yaml")
+      end
+
+      it "resolves path correctly" do
+        path = parser.compose_file_path
+        expect(File.dirname(path)).to eq(fixtures_path)
+      end
+    end
+
+    context "with dockerComposeFile array" do
+      subject(:parser) { described_class.new(File.join(fixtures_path, "with-compose-array.json")) }
+
+      it "returns first compose file from array" do
+        path = parser.compose_file_path
+        expect(path).to end_with("fixtures/devcontainer/compose.yaml")
+      end
+    end
+
+    context "with direct image property (no compose)" do
+      subject(:parser) { described_class.new(File.join(fixtures_path, "with-image.json")) }
+
+      it "returns nil" do
+        expect(parser.compose_file_path).to be_nil
+      end
+    end
+
+    context "with nonexistent file" do
+      subject(:parser) { described_class.new("/nonexistent/path.json") }
+
+      it "returns nil" do
+        expect(parser.compose_file_path).to be_nil
+      end
+    end
+  end
 end

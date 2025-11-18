@@ -9,6 +9,8 @@ require_relative "dev/devcontainer_parser"
 require_relative "dev/devcontainer"
 require_relative "dev/state_manager"
 require_relative "dev/secrets_loader"
+require_relative "dev/registry"
+require_relative "dev/builder"
 require_relative "providers/base"
 require_relative "providers/upcloud"
 require_relative "cli/dev"
@@ -17,6 +19,9 @@ module Kamal
   module Dev
     class Error < StandardError; end
     class ConfigurationError < Error; end
+    class RegistryError < Error; end
+    class BuildError < Error; end
+    class DeploymentError < Error; end
   end
 end
 

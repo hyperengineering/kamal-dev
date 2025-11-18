@@ -68,6 +68,45 @@ module Kamal
         ssh["key_path"] || "~/.ssh/id_rsa.pub"
       end
 
+      # Registry configuration for image building and pushing
+      #
+      # @return [Hash] Registry configuration (server, username_env, password_env)
+      def registry
+        raw_config[:registry]&.deep_stringify_keys || {}
+      end
+
+      # Registry server URL (defaults to ghcr.io)
+      #
+      # @return [String] Registry server URL
+      def registry_server
+        registry["server"] || "ghcr.io"
+      end
+
+      # Registry username loaded from environment variable
+      #
+      # @return [String, nil] Registry username from ENV
+      def registry_username
+        return nil unless registry["username"]
+
+        ENV[registry["username"]]
+      end
+
+      # Registry password/token loaded from environment variable
+      #
+      # @return [String, nil] Registry password from ENV
+      def registry_password
+        return nil unless registry["password"]
+
+        ENV[registry["password"]]
+      end
+
+      # Check if registry credentials are configured
+      #
+      # @return [Boolean] true if both username and password ENV vars are set
+      def registry_configured?
+        !!(registry["username"] && registry["password"])
+      end
+
       def container_name(index)
         pattern = naming_pattern
 
@@ -133,7 +172,7 @@ module Kamal
           raise Kamal::Dev::ConfigurationError, "Configuration file not found: #{path}"
         end
 
-        YAML.load_file(path, symbolize_names: true)
+        YAML.safe_load_file(path, permitted_classes: [Symbol], symbolize_names: true)
       rescue Psych::SyntaxError => e
         raise Kamal::Dev::ConfigurationError, "Invalid YAML in #{path}: #{e.message}"
       end

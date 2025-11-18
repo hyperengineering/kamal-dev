@@ -1,0 +1,6 @@
+{
+  "name": "Rails Development",
+  "dockerComposeFile": ["compose.yaml", "compose.override.yaml"],
+  "service": "app",
+  "workspaceFolder": "/workspace"
+}

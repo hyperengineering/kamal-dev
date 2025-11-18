@@ -83,7 +83,7 @@ module Kamal
         end
       end
 
-      # Add a new deployment to state
+      # Add a new deployment to state (single container)
       #
       # @param deployment [Hash] Deployment data with keys:
       #   - :name [String] Container name (key in deployments hash)
@@ -101,6 +101,37 @@ module Kamal
             "container_name" => deployment[:container_name],
             "status" => deployment[:status],
             "deployed_at" => deployment[:deployed_at]
+          }
+          state
+        end
+      end
+
+      # Add a compose stack deployment to state (multiple containers per VM)
+      #
+      # @param vm_name [String] VM identifier (e.g., "myapp-1")
+      # @param vm_id [String] Cloud provider VM ID
+      # @param vm_ip [String] VM IP address
+      # @param containers [Array<Hash>] Array of container hashes with keys:
+      #   - :name [String] Container name
+      #   - :service [String] Service name from compose file
+      #   - :image [String] Docker image reference
+      #   - :status [String] Container status
+      def add_compose_deployment(vm_name, vm_id, vm_ip, containers)
+        update_state do |state|
+          state["deployments"] ||= {}
+          state["deployments"][vm_name] = {
+            "vm_id" => vm_id,
+            "vm_ip" => vm_ip,
+            "deployed_at" => Time.now.utc.iso8601,
+            "type" => "compose",
+            "containers" => containers.map do |container|
+              {
+                "name" => container[:name],
+                "service" => container[:service],
+                "image" => container[:image],
+                "status" => container[:status]
+              }
+            end
           }
           state
         end
@@ -142,10 +173,51 @@ module Kamal
 
       # List all deployments
       #
-      # @return [Hash] Hash of deployments keyed by container name
+      # Returns deployments in a normalized format, handling both
+      # single container and compose (multi-container) deployments.
+      #
+      # @return [Hash] Hash of deployments keyed by container/VM name
       def list_deployments
         state = read_state
         state["deployments"] || {}
+      end
+
+      # Check if deployment is a compose stack
+      #
+      # @param deployment_name [String] Deployment key name
+      # @return [Boolean] true if deployment is a compose stack
+      def compose_deployment?(deployment_name)
+        state = read_state
+        deployment = state.dig("deployments", deployment_name)
+        return false unless deployment
+
+        deployment["type"] == "compose" || deployment.key?("containers")
+      end
+
+      # Get containers for a deployment
+      #
+      # For single container deployments, returns array with one item.
+      # For compose deployments, returns all containers in the stack.
+      #
+      # @param deployment_name [String] Deployment key name
+      # @return [Array<Hash>] Array of container hashes
+      def get_containers(deployment_name)
+        state = read_state
+        deployment = state.dig("deployments", deployment_name)
+        return [] unless deployment
+
+        if deployment.key?("containers")
+          # Compose deployment - return container array
+          deployment["containers"]
+        else
+          # Single container deployment - wrap in array
+          [{
+            "name" => deployment["container_name"],
+            "service" => "app",
+            "image" => "unknown",
+            "status" => deployment["status"]
+          }]
+        end
       end
 
       private

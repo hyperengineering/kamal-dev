@@ -58,6 +58,44 @@ module Kamal
         }
       end
 
+      # Check if devcontainer uses Docker Compose
+      #
+      # @return [Boolean] true if dockerComposeFile property is present
+      def uses_compose?
+        content = File.read(@file_path)
+        clean_content = strip_comments(content)
+        devcontainer_json = JSON.parse(clean_content)
+
+        devcontainer_json.key?("dockerComposeFile")
+      rescue
+        false
+      end
+
+      # Get path to compose file if present
+      #
+      # Returns path relative to .devcontainer/ directory
+      #
+      # @return [String, nil] Path to compose file or nil if not using compose
+      def compose_file_path
+        return nil unless uses_compose?
+
+        content = File.read(@file_path)
+        clean_content = strip_comments(content)
+        devcontainer_json = JSON.parse(clean_content)
+
+        compose_file = devcontainer_json["dockerComposeFile"]
+        return nil unless compose_file
+
+        # Handle array of compose files (use first one)
+        compose_file = compose_file.first if compose_file.is_a?(Array)
+
+        # Resolve path relative to .devcontainer directory
+        devcontainer_dir = File.dirname(@file_path)
+        File.join(devcontainer_dir, compose_file)
+      rescue
+        nil
+      end
+
       private
 
       # Strip single-line (//) and multi-line (/* */) comments from JSON
@@ -78,8 +116,11 @@ module Kamal
       # @param json [Hash] Parsed JSON hash
       # @raise [ValidationError] if image property is missing
       def validate_required_properties!(json)
+        # Docker Compose files have their own validation - skip image check
+        return if json["dockerComposeFile"]
+
         unless json["image"] || json["dockerfile"]
-          raise ValidationError, "Devcontainer.json must specify either 'image' or 'dockerfile' property"
+          raise ValidationError, "Devcontainer.json must specify either 'image', 'dockerfile', or 'dockerComposeFile' property"
         end
       end
 

@@ -1,0 +1,6 @@
+{
+  "name": "Simple Ruby",
+  "image": "ruby:3.2",
+  "forwardPorts": [3000],
+  "workspaceFolder": "/workspace"
+}

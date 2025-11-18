@@ -276,4 +276,122 @@ RSpec.describe Kamal::Dev::StateManager do
       expect(deployments).to have_key("myapp-dev-2")
     end
   end
+
+  describe "#add_compose_deployment" do
+    it "adds compose deployment with multiple containers" do
+      containers = [
+        {name: "myapp-app-1", service: "app", image: "ghcr.io/user/myapp:tag", status: "running"},
+        {name: "myapp-postgres-1", service: "postgres", image: "postgres:16", status: "running"}
+      ]
+
+      manager.add_compose_deployment("myapp-1", "vm-123", "1.2.3.4", containers)
+
+      state = manager.read_state
+      deployment = state["deployments"]["myapp-1"]
+
+      expect(deployment["vm_id"]).to eq("vm-123")
+      expect(deployment["vm_ip"]).to eq("1.2.3.4")
+      expect(deployment["type"]).to eq("compose")
+      expect(deployment["containers"].size).to eq(2)
+      expect(deployment["containers"][0]["name"]).to eq("myapp-app-1")
+      expect(deployment["containers"][0]["service"]).to eq("app")
+      expect(deployment["containers"][1]["service"]).to eq("postgres")
+    end
+
+    it "stores timestamp" do
+      containers = [{name: "myapp-app-1", service: "app", image: "test:tag", status: "running"}]
+
+      manager.add_compose_deployment("myapp-1", "vm-123", "1.2.3.4", containers)
+
+      state = manager.read_state
+      expect(state["deployments"]["myapp-1"]["deployed_at"]).to match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/)
+    end
+  end
+
+  describe "#compose_deployment?" do
+    context "with compose deployment" do
+      before do
+        containers = [{name: "myapp-app-1", service: "app", image: "test:tag", status: "running"}]
+        manager.add_compose_deployment("myapp-1", "vm-123", "1.2.3.4", containers)
+      end
+
+      it "returns true" do
+        expect(manager.compose_deployment?("myapp-1")).to be true
+      end
+    end
+
+    context "with single container deployment" do
+      before do
+        manager.add_deployment({
+          name: "myapp-dev-1",
+          vm_id: "vm-123",
+          vm_ip: "1.2.3.4",
+          container_name: "myapp-dev-1",
+          status: "running",
+          deployed_at: Time.now.iso8601
+        })
+      end
+
+      it "returns false" do
+        expect(manager.compose_deployment?("myapp-dev-1")).to be false
+      end
+    end
+
+    context "with nonexistent deployment" do
+      it "returns false" do
+        expect(manager.compose_deployment?("nonexistent")).to be false
+      end
+    end
+  end
+
+  describe "#get_containers" do
+    context "with compose deployment" do
+      before do
+        containers = [
+          {name: "myapp-app-1", service: "app", image: "ghcr.io/user/myapp:tag", status: "running"},
+          {name: "myapp-postgres-1", service: "postgres", image: "postgres:16", status: "running"}
+        ]
+        manager.add_compose_deployment("myapp-1", "vm-123", "1.2.3.4", containers)
+      end
+
+      it "returns all containers" do
+        containers = manager.get_containers("myapp-1")
+
+        expect(containers.size).to eq(2)
+        expect(containers[0]["name"]).to eq("myapp-app-1")
+        expect(containers[0]["service"]).to eq("app")
+        expect(containers[1]["name"]).to eq("myapp-postgres-1")
+        expect(containers[1]["service"]).to eq("postgres")
+      end
+    end
+
+    context "with single container deployment" do
+      before do
+        manager.add_deployment({
+          name: "myapp-dev-1",
+          vm_id: "vm-123",
+          vm_ip: "1.2.3.4",
+          container_name: "myapp-dev-1",
+          status: "running",
+          deployed_at: Time.now.iso8601
+        })
+      end
+
+      it "wraps single container in array" do
+        containers = manager.get_containers("myapp-dev-1")
+
+        expect(containers.size).to eq(1)
+        expect(containers[0]["name"]).to eq("myapp-dev-1")
+        expect(containers[0]["service"]).to eq("app")
+        expect(containers[0]["status"]).to eq("running")
+      end
+    end
+
+    context "with nonexistent deployment" do
+      it "returns empty array" do
+        containers = manager.get_containers("nonexistent")
+        expect(containers).to eq([])
+      end
+    end
+  end
 end

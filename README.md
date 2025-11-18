@@ -208,6 +208,266 @@ Kamal::Dev parses VS Code [devcontainer.json](https://containers.dev/) specifica
 }
 ```
 
+## Docker Compose Support
+
+Kamal::Dev supports deploying complex development stacks using Docker Compose, enabling multi-service deployments (app + database + cache + workers) with custom Dockerfiles.
+
+### Registry Configuration
+
+To build and push images, configure a container registry in `config/dev.yml`:
+
+```yaml
+service: myapp-dev
+
+# Registry for image building and pushing
+registry:
+  server: ghcr.io                    # or docker.io for Docker Hub
+  username: GITHUB_USER              # ENV var name (not actual username)
+  password: GITHUB_TOKEN             # ENV var name (not actual password)
+
+provider:
+  type: upcloud
+  zone: us-nyc1
+  plan: 2xCPU-4GB
+
+# Reference compose file from devcontainer
+image: .devcontainer/devcontainer.json  # which references compose.yaml
+```
+
+Then set credentials in `.kamal/secrets`:
+
+```bash
+export GITHUB_USER="your-github-username"
+export GITHUB_TOKEN="ghp_your_personal_access_token"
+export UPCLOUD_USERNAME="your-upcloud-username"
+export UPCLOUD_PASSWORD="your-upcloud-password"
+```
+
+**Supported Registries:**
+- GitHub Container Registry (GHCR): `server: ghcr.io`
+- Docker Hub: `server: docker.io`
+- Custom registries: `server: registry.example.com`
+
+### Building and Pushing Images
+
+**Build image from Dockerfile:**
+
+```bash
+kamal dev build
+```
+
+**Push image to registry:**
+
+```bash
+kamal dev push
+```
+
+**Build, push, and deploy in one command:**
+
+```bash
+kamal dev deploy --count 3
+```
+
+**Skip build or push:**
+
+```bash
+kamal dev deploy --skip-build  # Use existing local image
+kamal dev deploy --skip-push   # Use local image, don't push to registry
+```
+
+**Tag strategies:**
+
+Images are automatically tagged with:
+- **Timestamp tag:** Unix timestamp (e.g., `1700000000`)
+- **Git SHA tag:** Short commit hash (e.g., `abc123f`)
+- **Custom tag:** Specify with `--tag` flag
+
+### Multi-Service Deployment (Docker Compose)
+
+Deploy full development stacks with multiple services:
+
+**Example: Rails app with PostgreSQL**
+
+`.devcontainer/devcontainer.json`:
+```json
+{
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspace"
+}
+```
+
+`.devcontainer/compose.yaml`:
+```yaml
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ../:/workspace:cached
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/myapp_dev
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: postgres
+
+volumes:
+  postgres_data:
+```
+
+**Deployment workflow:**
+
+1. **Build** - Builds app service image from Dockerfile
+2. **Push** - Pushes image to registry (e.g., `ghcr.io/user/myapp-dev:abc123`)
+3. **Transform** - Replaces `build:` with `image:` reference in compose.yaml
+4. **Deploy** - Deploys full stack to each VM via `docker-compose up -d`
+
+**Result:** Each VM gets an isolated stack (app + postgres + volumes)
+
+```bash
+# Deploy 3 isolated stacks
+kamal dev deploy --count 3
+
+# Each VM runs:
+# - myapp-dev container (your app)
+# - postgres container (isolated database)
+# - Named volumes for persistence
+```
+
+**List all containers:**
+
+```bash
+kamal dev list
+
+# Output includes all services:
+# NAME               IP        STATUS   DEPLOYED AT
+# myapp-dev-1-app    1.2.3.4   running  2025-11-18 10:30:00
+# myapp-dev-1-postgres 1.2.3.4 running  2025-11-18 10:30:00
+# myapp-dev-2-app    2.3.4.5   running  2025-11-18 10:30:15
+# myapp-dev-2-postgres 2.3.4.5 running  2025-11-18 10:30:15
+```
+
+### Compose File Requirements
+
+**Supported features:**
+- ✅ Services with `build:` sections (main app service)
+- ✅ Services with `image:` references (postgres, redis, etc.)
+- ✅ Build context (string or object format)
+- ✅ Dockerfile path specification
+- ✅ Environment variables, volumes, ports
+- ✅ Service dependencies (`depends_on`)
+- ✅ Named volumes
+
+**Limitations (Phase 1):**
+- ❌ Single architecture builds only (amd64)
+- ❌ Advanced compose features (networks, configs, profiles)
+- ❌ Shared databases across VMs (each VM gets isolated stack)
+
+**Main service detection:**
+- First service with `build:` section is treated as main app service
+- Only main service image is built and pushed to registry
+- Dependent services (postgres, redis) use pre-built images
+
+### Example: Full Stack Rails Application
+
+**Directory structure:**
+```
+.devcontainer/
+├── Dockerfile
+├── devcontainer.json
+└── compose.yaml
+```
+
+**Dockerfile:**
+```dockerfile
+FROM ruby:3.2
+
+RUN apt-get update && apt-get install -y \
+  build-essential \
+  libpq-dev \
+  nodejs \
+  yarn
+
+WORKDIR /workspace
+
+COPY Gemfile* ./
+RUN bundle install
+
+CMD ["bundle", "exec", "rails", "server", "-b", "0.0.0.0"]
+```
+
+**compose.yaml:**
+```yaml
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ../:/workspace:cached
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/myapp_dev
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:16
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: postgres
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+**Deploy:**
+```bash
+kamal dev deploy --count 2
+
+# Builds app image
+# Pushes to ghcr.io/user/myapp-dev:abc123
+# Deploys 2 isolated stacks (each with app + postgres + redis)
+```
+
+### Troubleshooting Compose Deployments
+
+**Build failures:**
+- Check Dockerfile syntax
+- Verify build context path
+- Review build args and secrets
+- Enable verbose mode: `VERBOSE=1 kamal dev build`
+
+**Push failures:**
+- Verify registry credentials in `.kamal/secrets`
+- Check GHCR token has `write:packages` permission
+- Ensure image name follows registry conventions
+
+**Deploy failures:**
+- Check transformed compose.yaml: `.kamal/dev_transformed_compose.yaml`
+- Verify all service images are accessible
+- Review volume mount paths
+- Check for port conflicts between services
+
 ### Secrets Management
 
 Secrets are loaded from `.kamal/secrets` (shell script with `export` statements) and injected into containers as Base64-encoded environment variables.

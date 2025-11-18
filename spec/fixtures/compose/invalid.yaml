@@ -1,0 +1,4 @@
+# Invalid YAML - missing colon after services
+services
+  app:
+    image: ruby:3.2

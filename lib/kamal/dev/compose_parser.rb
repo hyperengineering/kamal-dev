@@ -1,0 +1,189 @@
+# frozen_string_literal: true
+
+require "yaml"
+
+module Kamal
+  module Dev
+    # Parser for Docker Compose files
+    #
+    # Parses compose.yaml files to extract service definitions, build contexts,
+    # and Dockerfiles. Identifies main application service vs dependent services
+    # (databases, caches, etc.) for deployment orchestration.
+    #
+    # @example Basic usage
+    #   parser = Kamal::Dev::ComposeParser.new(".devcontainer/compose.yaml")
+    #   parser.main_service
+    #   # => "app"
+    #
+    # @example Get build context
+    #   parser.service_build_context("app")
+    #   # => "."
+    #
+    # @example Check if service has build section
+    #   parser.has_build_section?("postgres")
+    #   # => false
+    #
+    class ComposeParser
+      attr_reader :compose_file_path, :compose_data
+
+      # Initialize parser with compose file path
+      #
+      # @param compose_file_path [String] Path to compose.yaml file
+      # @raise [Kamal::Dev::ConfigurationError] if file not found or invalid YAML
+      def initialize(compose_file_path)
+        @compose_file_path = compose_file_path
+        @compose_data = load_and_parse
+      end
+
+      # Get all services from compose file
+      #
+      # @return [Hash] Service definitions keyed by service name
+      def services
+        compose_data.fetch("services", {})
+      end
+
+      # Identify the main application service
+      #
+      # Uses heuristic: first service with a build: section,
+      # or first service if none have build sections
+      #
+      # @return [String, nil] Main service name
+      def main_service
+        # Find first service with build section
+        service_with_build = services.find { |_, config| config.key?("build") }
+        return service_with_build[0] if service_with_build
+
+        # Fallback to first service
+        services.keys.first
+      end
+
+      # Get build context for a service
+      #
+      # @param service_name [String] Service name
+      # @return [String] Build context path (default: ".")
+      def service_build_context(service_name)
+        service = services[service_name]
+        return "." unless service
+
+        build_config = service["build"]
+        return "." unless build_config
+
+        # Handle string build path (shorthand)
+        return build_config if build_config.is_a?(String)
+
+        # Handle object build config
+        build_config["context"] || "."
+      end
+
+      # Get Dockerfile path for a service
+      #
+      # @param service_name [String] Service name
+      # @return [String] Dockerfile path (default: "Dockerfile")
+      def service_dockerfile(service_name)
+        service = services[service_name]
+        return "Dockerfile" unless service
+
+        build_config = service["build"]
+        return "Dockerfile" unless build_config
+
+        # Handle object build config
+        return "Dockerfile" if build_config.is_a?(String)
+
+        build_config["dockerfile"] || "Dockerfile"
+      end
+
+      # Check if service has a build section
+      #
+      # @param service_name [String] Service name
+      # @return [Boolean] true if service uses build:, false if image:
+      def has_build_section?(service_name)
+        service = services[service_name]
+        return false unless service
+
+        service.key?("build")
+      end
+
+      # Get dependent services (services without build sections)
+      #
+      # These are typically databases, caches, message queues, etc.
+      # that use pre-built images from registries
+      #
+      # @return [Array<String>] Service names without build sections
+      def dependent_services
+        services.select { |_, config| !config.key?("build") }.keys
+      end
+
+      # Transform compose file for deployment
+      #
+      # Replaces build: sections with image: references pointing to
+      # the pushed registry image. Preserves all other service properties.
+      #
+      # @param image_ref [String] Full image reference (e.g., "ghcr.io/user/app:tag")
+      # @return [String] Transformed YAML content
+      # @raise [Kamal::Dev::ConfigurationError] if transformation fails
+      def transform_for_deployment(image_ref)
+        transformed = deep_copy(compose_data)
+        main = main_service
+
+        if main && transformed["services"][main]
+          # Remove build section
+          transformed["services"][main].delete("build")
+
+          # Add image reference
+          transformed["services"][main]["image"] = image_ref
+        end
+
+        # Convert back to YAML
+        YAML.dump(transformed)
+      rescue => e
+        raise Kamal::Dev::ConfigurationError, "Failed to transform compose file: #{e.message}"
+      end
+
+      private
+
+      # Load and parse compose YAML file
+      #
+      # @return [Hash] Parsed compose data
+      # @raise [Kamal::Dev::ConfigurationError] if file not found or invalid
+      def load_and_parse
+        unless File.exist?(compose_file_path)
+          raise Kamal::Dev::ConfigurationError, "Compose file not found: #{compose_file_path}"
+        end
+
+        content = File.read(compose_file_path)
+        data = YAML.safe_load(content, permitted_classes: [Symbol])
+
+        validate_compose_structure!(data)
+        data
+      rescue Psych::SyntaxError => e
+        raise Kamal::Dev::ConfigurationError, "Invalid YAML in compose file: #{e.message}"
+      end
+
+      # Validate compose file structure
+      #
+      # @param data [Hash] Parsed compose data
+      # @raise [Kamal::Dev::ConfigurationError] if structure invalid
+      def validate_compose_structure!(data)
+        unless data.is_a?(Hash)
+          raise Kamal::Dev::ConfigurationError, "Compose file must be a YAML object"
+        end
+
+        unless data.key?("services")
+          raise Kamal::Dev::ConfigurationError, "Compose file must have 'services' section"
+        end
+
+        if data["services"].empty?
+          raise Kamal::Dev::ConfigurationError, "Compose file must define at least one service"
+        end
+      end
+
+      # Deep copy hash to avoid modifying original
+      #
+      # @param obj [Object] Object to copy
+      # @return [Object] Deep copy
+      def deep_copy(obj)
+        Marshal.load(Marshal.dump(obj))
+      end
+    end
+  end
+end

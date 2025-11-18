@@ -180,6 +180,109 @@ RSpec.describe Kamal::Dev::Config do
     end
   end
 
+  describe "#registry" do
+    it "returns empty hash when registry not configured" do
+      config = described_class.new(valid_config_hash)
+      expect(config.registry).to eq({})
+    end
+
+    it "returns registry configuration when configured" do
+      config_with_registry = valid_config_hash.merge(
+        "registry" => {
+          "server" => "ghcr.io",
+          "username" => "GITHUB_USER",
+          "password" => "GITHUB_TOKEN"
+        }
+      )
+      config = described_class.new(config_with_registry)
+
+      registry = config.registry
+      expect(registry["server"]).to eq("ghcr.io")
+      expect(registry["username"]).to eq("GITHUB_USER")
+      expect(registry["password"]).to eq("GITHUB_TOKEN")
+    end
+  end
+
+  describe "#registry_server" do
+    it "defaults to ghcr.io when not configured" do
+      config = described_class.new(valid_config_hash)
+      expect(config.registry_server).to eq("ghcr.io")
+    end
+
+    it "returns configured registry server" do
+      config_with_registry = valid_config_hash.merge(
+        "registry" => {"server" => "hub.docker.com"}
+      )
+      config = described_class.new(config_with_registry)
+
+      expect(config.registry_server).to eq("hub.docker.com")
+    end
+  end
+
+  describe "#registry_username" do
+    it "returns nil when username_env not configured" do
+      config = described_class.new(valid_config_hash)
+      expect(config.registry_username).to be_nil
+    end
+
+    it "loads username from environment variable" do
+      config_with_registry = valid_config_hash.merge(
+        "registry" => {"username" => "GITHUB_USER"}
+      )
+      config = described_class.new(config_with_registry)
+
+      ENV["GITHUB_USER"] = "testuser"
+      expect(config.registry_username).to eq("testuser")
+      ENV.delete("GITHUB_USER")
+    end
+  end
+
+  describe "#registry_password" do
+    it "returns nil when password_env not configured" do
+      config = described_class.new(valid_config_hash)
+      expect(config.registry_password).to be_nil
+    end
+
+    it "loads password from environment variable" do
+      config_with_registry = valid_config_hash.merge(
+        "registry" => {"password" => "GITHUB_TOKEN"}
+      )
+      config = described_class.new(config_with_registry)
+
+      ENV["GITHUB_TOKEN"] = "ghp_secret123"
+      expect(config.registry_password).to eq("ghp_secret123")
+      ENV.delete("GITHUB_TOKEN")
+    end
+  end
+
+  describe "#registry_configured?" do
+    it "returns false when registry not configured" do
+      config = described_class.new(valid_config_hash)
+      expect(config.registry_configured?).to be false
+    end
+
+    it "returns false when only username configured" do
+      config_with_registry = valid_config_hash.merge(
+        "registry" => {"username" => "GITHUB_USER"}
+      )
+      config = described_class.new(config_with_registry)
+
+      expect(config.registry_configured?).to be false
+    end
+
+    it "returns true when both username and password configured" do
+      config_with_registry = valid_config_hash.merge(
+        "registry" => {
+          "username" => "GITHUB_USER",
+          "password" => "GITHUB_TOKEN"
+        }
+      )
+      config = described_class.new(config_with_registry)
+
+      expect(config.registry_configured?).to be true
+    end
+  end
+
   describe "#validate!" do
     it "validates service name against Docker naming rules" do
       invalid_config = valid_config_hash.merge("service" => "@invalid-service")
