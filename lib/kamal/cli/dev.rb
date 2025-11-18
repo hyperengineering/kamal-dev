@@ -3,6 +3,7 @@
 require "thor"
 require "json"
 require "yaml"
+require "net/ssh"
 require "sshkit"
 require "sshkit/dsl"
 require_relative "../dev/config"
@@ -359,6 +360,20 @@ module Kamal
           puts "✓ Provisioned #{vms.size} VM(s)"
           puts
 
+          # Save VM state immediately (before bootstrap) to track orphaned VMs
+          state_manager = get_state_manager
+
+          vms.each_with_index do |vm, idx|
+            vm_name = "#{config.service}-#{idx + 1}"
+            state_manager.add_compose_deployment(vm_name, vm[:id], vm[:ip], [])
+          end
+
+          # Wait for SSH to become available
+          puts "Waiting for SSH to become available on #{vms.size} VM(s)..."
+          wait_for_ssh(vms.map { |vm| vm[:ip] })
+          puts "✓ SSH ready on all VMs"
+          puts
+
           # Bootstrap Docker + Compose
           puts "Bootstrapping Docker and Compose on #{vms.size} VM(s)..."
           bootstrap_docker(vms.map { |vm| vm[:ip] })
@@ -366,7 +381,6 @@ module Kamal
           puts
 
           # Deploy compose stacks to each VM
-          state_manager = get_state_manager
           deployed_vms = []
 
           vms.each_with_index do |vm, idx|
@@ -459,13 +473,7 @@ module Kamal
           puts "✓ Provisioned #{vms.size} VM(s)"
           puts
 
-          # Bootstrap Docker on VMs
-          puts "Bootstrapping Docker on #{vms.size} VM(s)..."
-          bootstrap_docker(vms.map { |vm| vm[:ip] })
-          puts "✓ Docker installed on all VMs"
-          puts
-
-          # Deploy containers
+          # Save VM state immediately (before bootstrap) to track orphaned VMs
           state_manager = get_state_manager
           existing_state = state_manager.read_state
           deployments_data = existing_state.fetch("deployments", {})
@@ -473,22 +481,39 @@ module Kamal
 
           vms.each_with_index do |vm, idx|
             container_name = config.container_name(next_index + idx)
-            docker_command = devcontainer_config.docker_run_command(name: container_name)
-
-            puts "Deploying #{container_name} to #{vm[:ip]}..."
-            deploy_container(vm[:ip], docker_command)
-
-            # Save deployment state
             deployment = {
               name: container_name,
               vm_id: vm[:id],
               vm_ip: vm[:ip],
               container_name: container_name,
-              status: "running",
+              status: "provisioned", # Track VM even if bootstrap fails
               deployed_at: Time.now.utc.iso8601
             }
-
             state_manager.add_deployment(deployment)
+          end
+
+          # Wait for SSH to become available
+          puts "Waiting for SSH to become available on #{vms.size} VM(s)..."
+          wait_for_ssh(vms.map { |vm| vm[:ip] })
+          puts "✓ SSH ready on all VMs"
+          puts
+
+          # Bootstrap Docker on VMs
+          puts "Bootstrapping Docker on #{vms.size} VM(s)..."
+          bootstrap_docker(vms.map { |vm| vm[:ip] })
+          puts "✓ Docker installed on all VMs"
+          puts
+
+          # Deploy containers
+          vms.each_with_index do |vm, idx|
+            container_name = config.container_name(next_index + idx)
+            docker_command = devcontainer_config.docker_run_command(name: container_name)
+
+            puts "Deploying #{container_name} to #{vm[:ip]}..."
+            deploy_container(vm[:ip], docker_command)
+
+            # Update deployment state to running
+            state_manager.update_deployment_status(container_name, "running")
 
             puts "✓ #{container_name}"
             puts "  VM: #{vm[:id]}"
@@ -701,6 +726,56 @@ module Kamal
         # SSH key path
         def ssh_key_path
           File.expand_path("~/.ssh/id_rsa")  # TODO: Make configurable
+        end
+
+        # Wait for SSH to become available on VMs with exponential backoff
+        #
+        # Retries SSH connection with exponential backoff until successful or timeout.
+        # Cloud-init VMs may take 30-60s to boot and start SSH daemon.
+        #
+        # @param ips [Array<String>] VM IP addresses
+        # @param max_retries [Integer] Maximum number of retry attempts (default: 12)
+        # @param initial_delay [Integer] Initial delay in seconds (default: 5)
+        # @raise [RuntimeError] if SSH doesn't become available within timeout
+        #
+        # Retry schedule (total ~6 minutes):
+        # - Attempt 1-3: 5s, 10s, 20s (fast retries for quick boots)
+        # - Attempt 4-8: 30s each (steady retries)
+        # - Attempt 9-12: 30s each (final attempts)
+        def wait_for_ssh(ips, max_retries: 12, initial_delay: 5)
+          ips.each do |ip|
+            retries = 0
+            delay = initial_delay
+            connected = false
+
+            while retries < max_retries && !connected
+              begin
+                # Attempt SSH connection with short timeout
+                Net::SSH.start(ip, "root",
+                  keys: [File.expand_path(load_config.ssh_key_path).sub(/\.pub$/, "")],
+                  timeout: 5,
+                  auth_methods: ["publickey"],
+                  verify_host_key: :never,
+                  non_interactive: true) do |ssh|
+                  # Simple command to verify SSH is working
+                  ssh.exec!("echo 'SSH ready'")
+                  connected = true
+                end
+              rescue Net::SSH::Exception, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::ENETUNREACH, Errno::ETIMEDOUT, SocketError => e
+                retries += 1
+                if retries < max_retries
+                  print "."
+                  sleep delay
+                  # Exponential backoff: 5s -> 10s -> 20s -> 30s (cap at 30s)
+                  delay = [delay * 2, 30].min
+                else
+                  raise "SSH connection to #{ip} failed after #{max_retries} attempts (#{max_retries * initial_delay}s timeout). Error: #{e.message}"
+                end
+              end
+            end
+
+            puts " ready" if connected
+          end
         end
 
         # Bootstrap Docker on VMs if not already installed
