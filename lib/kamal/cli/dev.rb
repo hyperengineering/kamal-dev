@@ -847,14 +847,18 @@ module Kamal
             return
           end
 
-          # Pre-escape values BEFORE on() block
+          # Pre-escape values for shell command
           password_escaped = Shellwords.escape(registry.password.to_s)
           username_escaped = Shellwords.escape(registry.username.to_s)
           server_escaped = Shellwords.escape(registry.server.to_s)
 
+          # Build the complete shell command with pipe inside the sh -c string
+          login_command = "echo #{password_escaped} | docker login #{server_escaped} -u #{username_escaped} --password-stdin"
+
           on(prepare_hosts(ips)) do
             # Use --password-stdin for secure password transmission
-            execute "sh", "-c", "echo #{password_escaped} | docker login #{server_escaped} -u #{username_escaped} --password-stdin"
+            # The entire pipeline must be within the sh -c command
+            execute :sh, "-c", login_command
           end
         end
 
