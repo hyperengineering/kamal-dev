@@ -59,8 +59,11 @@ module Kamal
 
       # Get build context for a service
       #
+      # Resolves context path relative to the compose file's directory,
+      # since Docker Compose interprets paths relative to the compose file location.
+      #
       # @param service_name [String] Service name
-      # @return [String] Build context path (default: ".")
+      # @return [String] Build context path resolved relative to compose file (default: ".")
       def service_build_context(service_name)
         service = services[service_name]
         return "." unless service
@@ -68,17 +71,28 @@ module Kamal
         build_config = service["build"]
         return "." unless build_config
 
-        # Handle string build path (shorthand)
-        return build_config if build_config.is_a?(String)
+        # Get context from build config
+        context = if build_config.is_a?(String)
+          # Handle string build path (shorthand) - this is the context
+          build_config
+        else
+          # Handle object build config
+          build_config["context"] || "."
+        end
 
-        # Handle object build config
-        build_config["context"] || "."
+        # Resolve context relative to compose file's directory
+        # Docker Compose does this automatically, but we're extracting values
+        compose_dir = File.dirname(compose_file_path)
+        File.expand_path(context, compose_dir)
       end
 
       # Get Dockerfile path for a service
       #
+      # Returns path relative to the build context (as Docker expects),
+      # NOT resolved to absolute path.
+      #
       # @param service_name [String] Service name
-      # @return [String] Dockerfile path (default: "Dockerfile")
+      # @return [String] Dockerfile path relative to build context (default: "Dockerfile")
       def service_dockerfile(service_name)
         service = services[service_name]
         return "Dockerfile" unless service
@@ -89,6 +103,7 @@ module Kamal
         # Handle object build config
         return "Dockerfile" if build_config.is_a?(String)
 
+        # Return dockerfile path as-is (relative to build context)
         build_config["dockerfile"] || "Dockerfile"
       end
 

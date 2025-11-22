@@ -178,15 +178,17 @@ module Kamal
           FileUtils.cp(entrypoint_template, entrypoint_dest)
           FileUtils.chmod(0755, entrypoint_dest)
 
+          # Resolve paths to absolute
+          context_abs = File.expand_path(context)
+          original_dockerfile_path = File.expand_path(File.join(context, dockerfile))
+
           # Create wrapper Dockerfile
           wrapper_dockerfile = File.join(temp_dir, "Dockerfile.kamal-dev")
-          original_dockerfile_path = File.join(context, dockerfile)
-
           File.write(wrapper_dockerfile, generate_wrapper_dockerfile(original_dockerfile_path))
 
           # Copy wrapper to context so docker build can access it
-          FileUtils.cp(wrapper_dockerfile, File.join(context, "Dockerfile.kamal-dev"))
-          FileUtils.cp(entrypoint_dest, File.join(context, "dev-entrypoint.sh"))
+          FileUtils.cp(wrapper_dockerfile, File.join(context_abs, "Dockerfile.kamal-dev"))
+          FileUtils.cp(entrypoint_dest, File.join(context_abs, "dev-entrypoint.sh"))
 
           begin
             # Build using wrapper Dockerfile
@@ -201,8 +203,8 @@ module Kamal
             execute_with_output(command, "Building image with kamal-dev entrypoint #{image}...")
           ensure
             # Cleanup temporary files from context
-            FileUtils.rm_f(File.join(context, "Dockerfile.kamal-dev"))
-            FileUtils.rm_f(File.join(context, "dev-entrypoint.sh"))
+            FileUtils.rm_f(File.join(context_abs, "Dockerfile.kamal-dev"))
+            FileUtils.rm_f(File.join(context_abs, "dev-entrypoint.sh"))
           end
         end
       end
