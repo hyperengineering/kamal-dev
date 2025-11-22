@@ -204,28 +204,26 @@ module Kamal
         # 2. If yes and workspace is empty, clones the repo
         # 3. Execs the original command
         # Use single-quote heredoc to prevent Ruby interpolation of $VARS
-        # Then manually interpolate only the original_command at the end
-        script = <<~'BASH'.strip
-          bash -c '
-            if [ -n "$KAMAL_DEV_GIT_REPO" ]; then
-              echo "[kamal-dev] Remote deployment detected"
-              if [ ! -d "$KAMAL_DEV_WORKSPACE_FOLDER/.git" ]; then
-                echo "[kamal-dev] Cloning $KAMAL_DEV_GIT_REPO (branch: $KAMAL_DEV_GIT_BRANCH)"
-                mkdir -p "$KAMAL_DEV_WORKSPACE_FOLDER"
-                git clone --depth 1 --branch "$KAMAL_DEV_GIT_BRANCH" "$KAMAL_DEV_GIT_REPO" "$KAMAL_DEV_WORKSPACE_FOLDER"
-                echo "[kamal-dev] Clone complete"
-              else
-                echo "[kamal-dev] Repository already cloned, pulling latest changes"
-                cd "$KAMAL_DEV_WORKSPACE_FOLDER" && git pull
-              fi
+        # Return as string - Docker Compose will handle it properly
+        script = <<~'BASH'.chomp
+          if [ -n "$KAMAL_DEV_GIT_REPO" ]; then
+            echo "[kamal-dev] Remote deployment detected"
+            if [ ! -d "$KAMAL_DEV_WORKSPACE_FOLDER/.git" ]; then
+              echo "[kamal-dev] Cloning $KAMAL_DEV_GIT_REPO (branch: $KAMAL_DEV_GIT_BRANCH)"
+              mkdir -p "$KAMAL_DEV_WORKSPACE_FOLDER"
+              git clone --depth 1 --branch "$KAMAL_DEV_GIT_BRANCH" "$KAMAL_DEV_GIT_REPO" "$KAMAL_DEV_WORKSPACE_FOLDER"
+              echo "[kamal-dev] Clone complete"
             else
-              echo "[kamal-dev] Local development mode (code mounted, not cloned)"
+              echo "[kamal-dev] Repository already cloned, pulling latest changes"
+              cd "$KAMAL_DEV_WORKSPACE_FOLDER" && git pull
             fi
-            exec ORIGINAL_COMMAND_PLACEHOLDER
-          '
+          else
+            echo "[kamal-dev] Local development mode (code mounted, not cloned)"
+          fi
+          exec ORIGINAL_COMMAND_PLACEHOLDER
         BASH
-        # Replace placeholder with actual command
-        script.gsub("ORIGINAL_COMMAND_PLACEHOLDER", original_command)
+        # Replace placeholder with actual command, wrap in sh -c for proper execution
+        "sh -c " + (script.gsub("ORIGINAL_COMMAND_PLACEHOLDER", original_command).dump)
       end
 
       # Load and parse compose YAML file
