@@ -69,11 +69,13 @@ ssh:
 # When configured, code is cloned from repository on deployment
 # Local devcontainer usage (VS Code) is unaffected - uses mounted code
 git:
-  repository: git@github.com:yourorg/yourrepo.git      # Git repository URL (SSH format for private repos)
+  repository: https://github.com/yourorg/yourrepo.git  # Git repository URL (HTTPS format)
   branch: main                                         # Branch to checkout (default: main)
   workspace_folder: /workspaces/myapp                  # Where to clone code (should match devcontainer workspaceFolder)
-  ssh_key: KAMAL_DEV_SSH_KEY                           # Environment variable name containing SSH private key (for private repos)
-                                                       # Add to .kamal/secrets: export KAMAL_DEV_SSH_KEY="$(cat ~/.ssh/id_rsa)"
+  token: GITHUB_TOKEN                                  # Environment variable name containing Personal Access Token (for private repos)
+                                                       # Generate token at: https://github.com/settings/tokens
+                                                       # Scopes needed: repo (for private repos)
+                                                       # Add to .kamal/secrets: export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
 
 # Default resource limits for containers
 defaults:
