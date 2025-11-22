@@ -125,36 +125,42 @@ RSpec.describe Kamal::Dev::ComposeParser do
 
   describe "#service_build_context" do
     context "with explicit context path" do
-      it "returns the context path" do
+      it "returns the absolute context path resolved relative to compose file" do
         parser = described_class.new(minimal_compose)
-        expect(parser.service_build_context("app")).to eq(".")
+        # Context is "." resolved relative to compose file's directory
+        expected_path = File.expand_path(".", File.dirname(minimal_compose))
+        expect(parser.service_build_context("app")).to eq(expected_path)
       end
     end
 
     context "with shorthand build syntax" do
-      it "returns the build path as context" do
+      it "returns the absolute build path as context" do
         parser = described_class.new(shorthand_build_compose)
-        expect(parser.service_build_context("app")).to eq(".")
+        expected_path = File.expand_path(".", File.dirname(shorthand_build_compose))
+        expect(parser.service_build_context("app")).to eq(expected_path)
       end
     end
 
     context "with custom context path" do
-      it "returns the custom context" do
+      it "returns the absolute custom context" do
         parser = described_class.new(full_stack_compose)
-        expect(parser.service_build_context("app")).to eq(".")
+        expected_path = File.expand_path(".", File.dirname(full_stack_compose))
+        expect(parser.service_build_context("app")).to eq(expected_path)
       end
     end
 
     context "with service without build section" do
-      it "returns default context" do
+      it "returns default context (no resolution needed)" do
         parser = described_class.new(rails_postgres_compose)
+        # Services without build sections return "." (no build context exists)
         expect(parser.service_build_context("postgres")).to eq(".")
       end
     end
 
     context "with nonexistent service" do
-      it "returns default context" do
+      it "returns default context (no resolution needed)" do
         parser = described_class.new(minimal_compose)
+        # Nonexistent services return "." (fallback)
         expect(parser.service_build_context("nonexistent")).to eq(".")
       end
     end
@@ -353,6 +359,111 @@ RSpec.describe Kamal::Dev::ComposeParser do
         }.to raise_error(Kamal::Dev::ConfigurationError, /Failed to transform/)
       end
     end
+
+    context "with git clone configuration" do
+      let(:mock_config) do
+        double(
+          "Config",
+          git_clone_enabled?: true,
+          git_repository: "https://github.com/user/repo.git",
+          git_branch: "main",
+          git_workspace_folder: "/workspaces/myapp",
+          git_token: "ghp_token123"
+        )
+      end
+
+      it "injects git environment variables when git clone is enabled" do
+        parser = described_class.new(minimal_compose)
+        transformed = parser.transform_for_deployment(image_ref, config: mock_config)
+        result = YAML.safe_load(transformed, permitted_classes: [Symbol])
+
+        env = result["services"]["app"]["environment"]
+        expect(env["KAMAL_DEV_GIT_REPO"]).to eq("https://github.com/user/repo.git")
+        expect(env["KAMAL_DEV_GIT_BRANCH"]).to eq("main")
+        expect(env["KAMAL_DEV_WORKSPACE_FOLDER"]).to eq("/workspaces/myapp")
+        expect(env["KAMAL_DEV_GIT_TOKEN"]).to eq("ghp_token123")
+      end
+
+      it "preserves existing environment variables" do
+        parser = described_class.new(minimal_compose)
+        transformed = parser.transform_for_deployment(image_ref, config: mock_config)
+        result = YAML.safe_load(transformed, permitted_classes: [Symbol])
+
+        # Original RAILS_ENV should still be present
+        expect(result["services"]["app"]["environment"]["RAILS_ENV"]).to eq("development")
+      end
+
+      it "does not inject git vars when git clone is disabled" do
+        parser = described_class.new(minimal_compose)
+        # Pass no config (git clone disabled)
+        transformed = parser.transform_for_deployment(image_ref)
+        result = YAML.safe_load(transformed, permitted_classes: [Symbol])
+
+        env = result["services"]["app"]["environment"]
+        expect(env["KAMAL_DEV_GIT_REPO"]).to be_nil
+        expect(env["KAMAL_DEV_GIT_BRANCH"]).to be_nil
+        expect(env["KAMAL_DEV_WORKSPACE_FOLDER"]).to be_nil
+        expect(env["KAMAL_DEV_GIT_TOKEN"]).to be_nil
+      end
+
+      context "without git token configured" do
+        let(:mock_config_no_token) do
+          double(
+            "Config",
+            git_clone_enabled?: true,
+            git_repository: "https://github.com/user/public-repo.git",
+            git_branch: "develop",
+            git_workspace_folder: "/workspaces/app",
+            git_token: nil
+          )
+        end
+
+        it "does not inject token env var when token is nil" do
+          parser = described_class.new(minimal_compose)
+          transformed = parser.transform_for_deployment(image_ref, config: mock_config_no_token)
+          result = YAML.safe_load(transformed, permitted_classes: [Symbol])
+
+          env = result["services"]["app"]["environment"]
+          expect(env["KAMAL_DEV_GIT_REPO"]).to eq("https://github.com/user/public-repo.git")
+          expect(env["KAMAL_DEV_GIT_BRANCH"]).to eq("develop")
+          expect(env["KAMAL_DEV_WORKSPACE_FOLDER"]).to eq("/workspaces/app")
+          expect(env["KAMAL_DEV_GIT_TOKEN"]).to be_nil
+        end
+      end
+
+      context "with service that has no environment section" do
+        let(:no_env_compose) { Tempfile.new(["compose", ".yaml"]) }
+
+        before do
+          no_env_compose.write({
+            "services" => {
+              "app" => {
+                "build" => {"context" => "."},
+                "ports" => ["3000:3000"]
+              }
+            }
+          }.to_yaml)
+          no_env_compose.close
+        end
+
+        after do
+          no_env_compose.unlink
+        end
+
+        it "creates environment section and injects git vars" do
+          parser = described_class.new(no_env_compose.path)
+          transformed = parser.transform_for_deployment(image_ref, config: mock_config)
+          result = YAML.safe_load(transformed, permitted_classes: [Symbol])
+
+          env = result["services"]["app"]["environment"]
+          expect(env).to be_a(Hash)
+          expect(env["KAMAL_DEV_GIT_REPO"]).to eq("https://github.com/user/repo.git")
+          expect(env["KAMAL_DEV_GIT_BRANCH"]).to eq("main")
+          expect(env["KAMAL_DEV_WORKSPACE_FOLDER"]).to eq("/workspaces/myapp")
+          expect(env["KAMAL_DEV_GIT_TOKEN"]).to eq("ghp_token123")
+        end
+      end
+    end
   end
 
   describe "edge cases" do
@@ -403,9 +514,10 @@ RSpec.describe Kamal::Dev::ComposeParser do
         empty_build_file.unlink
       end
 
-      it "returns default context for empty build" do
+      it "returns absolute default context for empty build" do
         parser = described_class.new(empty_build_file.path)
-        expect(parser.service_build_context("app")).to eq(".")
+        expected_path = File.expand_path(".", File.dirname(empty_build_file.path))
+        expect(parser.service_build_context("app")).to eq(expected_path)
       end
 
       it "returns default dockerfile for empty build" do

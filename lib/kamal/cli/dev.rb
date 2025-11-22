@@ -251,6 +251,9 @@ module Kamal
         config = load_config
         count = options[:count] || 1
 
+        # Validate git configuration if git clone is enabled
+        validate_git_config!(config)
+
         puts "🚀 Deploying #{count} devcontainer workspace(s) for '#{config.service}'"
         puts
 
@@ -707,6 +710,40 @@ module Kamal
           @config ||= begin
             config_path = options[:config] || self.class.class_options[:config].default
             Kamal::Dev::Config.new(config_path, validate: true)
+          end
+        end
+
+        # Validate git configuration for remote code cloning
+        #
+        # Checks if git clone is enabled and validates token configuration:
+        # - Warns if using HTTPS URL without token (may fail for private repos)
+        # - Errors if token ENV var is configured but not actually set
+        #
+        # @param config [Kamal::Dev::Config] Configuration object
+        # @raise [Kamal::Dev::ConfigurationError] if token configured but ENV var not set
+        def validate_git_config!(config)
+          return unless config.git_clone_enabled?
+
+          repo_url = config.git_repository
+
+          # Check if using HTTPS (implies possible private repo)
+          if repo_url.start_with?("https://")
+            token_env = config.git_token_env
+
+            if token_env
+              # Token configured - verify it's actually available in ENV
+              unless config.git_token
+                raise Kamal::Dev::ConfigurationError,
+                  "Git token environment variable '#{token_env}' is configured but not set.\n" \
+                  "Please add to .kamal/secrets: export #{token_env}=\"your_token_here\""
+              end
+              puts "✓ Git authentication configured (using #{token_env})"
+            else
+              # No token configured - warn about potential issues with private repos
+              puts "⚠️  Git clone configured without authentication token"
+              puts "   This will work for public repositories only"
+              puts "   For private repos, configure git.token in config/dev.yml"
+            end
           end
         end
 

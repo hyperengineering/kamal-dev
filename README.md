@@ -486,6 +486,123 @@ export DATABASE_URL="postgres://user:pass@host:5432/db"
 echo $GITHUB_TOKEN_B64 | base64 -d  # Decode if needed
 ```
 
+## Remote Code Sync (DevPod-Style)
+
+Kamal-dev supports **DevPod-style remote development** where your code is cloned from a git repository into the container rather than mounted from your local machine. This is ideal for cloud-based development workflows.
+
+### How It Works
+
+When you configure the `git:` section in `config/dev.yml`:
+
+1. **During image build**: A special entrypoint script (`dev-entrypoint.sh`) is injected into your Docker image
+2. **On container startup**: The entrypoint clones your repository into the workspace folder
+3. **For local development**: VS Code devcontainers work normally with mounted code (no git clone)
+
+**Key benefits:**
+- ✅ No local file mounting needed (pure cloud deployment)
+- ✅ Code changes persist across container restarts
+- ✅ Supports private repositories via GitHub Personal Access Token (PAT)
+- ✅ Automatic credential caching for git operations (pull/push)
+
+### Setup Instructions
+
+**Step 1: Generate GitHub Personal Access Token**
+
+1. Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
+2. Click **Generate new token (classic)**
+3. Give it a name: "kamal-dev deployment"
+4. Select scopes:
+   - ✅ `repo` (Full control of private repositories)
+5. Click **Generate token**
+6. **Copy the token** (starts with `ghp_...`) - you won't see it again
+
+**Step 2: Add token to secrets file**
+
+Add your token to `.kamal/secrets`:
+
+```bash
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
+```
+
+**Important**: Ensure the variable is **exported** so it's available to Ruby processes.
+
+**Step 3: Configure git clone in config/dev.yml**
+
+```yaml
+git:
+  repository: https://github.com/yourorg/yourrepo.git  # HTTPS URL (not SSH)
+  branch: main                                         # Branch to checkout
+  workspace_folder: /workspaces/myapp                  # Where to clone code
+  token: GITHUB_TOKEN                                  # Environment variable name
+```
+
+**Step 4: Deploy**
+
+```bash
+kamal dev deploy --count 2
+```
+
+The deployment process will:
+1. Build your image with the entrypoint script injected
+2. Push to registry
+3. Deploy containers with git environment variables
+4. On first boot, containers clone your repository
+
+### Verification
+
+**Check if code was cloned:**
+
+```bash
+# SSH into VM
+ssh root@<vm-ip>
+
+# Check container logs
+docker logs myapp-dev-1-app
+
+# Should see:
+# [kamal-dev] Remote deployment detected
+# [kamal-dev] Cloning https://github.com/yourorg/yourrepo.git (branch: main)
+# [kamal-dev] Clone complete: /workspaces/myapp
+```
+
+**Verify git authentication is cached:**
+
+```bash
+# Exec into container
+docker exec -it myapp-dev-1-app bash
+
+# Try pulling
+cd /workspaces/myapp
+git pull
+
+# Should succeed without prompting for credentials
+```
+
+### Important Notes
+
+- **Use HTTPS URLs**: `https://github.com/user/repo.git` (NOT `git@github.com:user/repo.git`)
+- **Token security**: The token is injected as an environment variable and used only at startup for cloning
+- **Credential caching**: Git credentials are stored in `~/.git-credentials` inside the container for future git operations
+- **Local development**: If you use VS Code with devcontainer.json, the git clone is skipped - your local code is mounted instead
+- **Token scopes**: For private repos, you need the `repo` scope. For public repos, no token is needed.
+
+### Troubleshooting
+
+**"fatal: could not read Username for 'https://github.com'"**
+- Verify `GITHUB_TOKEN` is in `.kamal/secrets`
+- Ensure the variable is **exported** (`export GITHUB_TOKEN=...`)
+- Check the token has `repo` scope for private repositories
+
+**"Permission denied" when cloning**
+- Check the token hasn't expired (GitHub tokens can have expiration dates)
+- Verify the token has access to the repository (check repo permissions)
+- Ensure you're using HTTPS URL, not SSH format
+
+**Code not appearing in /workspaces**
+- Check container logs: `docker logs <container-name>`
+- Verify workspace_folder matches devcontainer.json `workspaceFolder`
+- Ensure git repository URL is accessible
+
 ## Commands Reference
 
 All commands below assume you've run `bundle exec plugin-kamal-dev` as described in the Installation section. If you're using an alternative setup method, adjust the commands accordingly (see Alternative Setup Methods in Installation).

@@ -483,4 +483,140 @@ RSpec.describe Kamal::Dev::Config do
       expect(config.devcontainer_json?).to be false
     end
   end
+
+  describe "git configuration methods" do
+    describe "#git" do
+      it "returns empty hash when git not configured" do
+        config = described_class.new(valid_config_hash)
+        expect(config.git).to eq({})
+      end
+
+      it "returns git configuration when configured" do
+        config_with_git = valid_config_hash.merge(
+          "git" => {
+            "repository" => "https://github.com/user/repo.git",
+            "branch" => "develop",
+            "workspace_folder" => "/workspace/app",
+            "token" => "GITHUB_TOKEN"
+          }
+        )
+        config = described_class.new(config_with_git)
+
+        git = config.git
+        expect(git["repository"]).to eq("https://github.com/user/repo.git")
+        expect(git["branch"]).to eq("develop")
+        expect(git["workspace_folder"]).to eq("/workspace/app")
+        expect(git["token"]).to eq("GITHUB_TOKEN")
+      end
+    end
+
+    describe "#git_repository" do
+      it "returns nil when git not configured" do
+        config = described_class.new(valid_config_hash)
+        expect(config.git_repository).to be_nil
+      end
+
+      it "returns repository URL when configured" do
+        config_with_git = valid_config_hash.merge(
+          "git" => {"repository" => "https://github.com/user/repo.git"}
+        )
+        config = described_class.new(config_with_git)
+        expect(config.git_repository).to eq("https://github.com/user/repo.git")
+      end
+    end
+
+    describe "#git_branch" do
+      it "defaults to 'main' when not configured" do
+        config = described_class.new(valid_config_hash)
+        expect(config.git_branch).to eq("main")
+      end
+
+      it "returns configured branch" do
+        config_with_git = valid_config_hash.merge(
+          "git" => {"branch" => "develop"}
+        )
+        config = described_class.new(config_with_git)
+        expect(config.git_branch).to eq("develop")
+      end
+    end
+
+    describe "#git_workspace_folder" do
+      it "defaults to /workspaces/{service} when not configured" do
+        config = described_class.new(valid_config_hash)
+        expect(config.git_workspace_folder).to eq("/workspaces/myapp-dev")
+      end
+
+      it "returns configured workspace folder" do
+        config_with_git = valid_config_hash.merge(
+          "git" => {"workspace_folder" => "/custom/workspace"}
+        )
+        config = described_class.new(config_with_git)
+        expect(config.git_workspace_folder).to eq("/custom/workspace")
+      end
+    end
+
+    describe "#git_token_env" do
+      it "returns nil when token not configured" do
+        config = described_class.new(valid_config_hash)
+        expect(config.git_token_env).to be_nil
+      end
+
+      it "returns token environment variable name when configured" do
+        config_with_git = valid_config_hash.merge(
+          "git" => {"token" => "GITHUB_TOKEN"}
+        )
+        config = described_class.new(config_with_git)
+        expect(config.git_token_env).to eq("GITHUB_TOKEN")
+      end
+    end
+
+    describe "#git_token" do
+      it "returns nil when token env not configured" do
+        config = described_class.new(valid_config_hash)
+        expect(config.git_token).to be_nil
+      end
+
+      it "returns nil when token env var not set" do
+        config_with_git = valid_config_hash.merge(
+          "git" => {"token" => "MISSING_TOKEN"}
+        )
+        config = described_class.new(config_with_git)
+        expect(config.git_token).to be_nil
+      end
+
+      it "loads token from environment variable" do
+        config_with_git = valid_config_hash.merge(
+          "git" => {"token" => "GITHUB_TOKEN"}
+        )
+        config = described_class.new(config_with_git)
+
+        ENV["GITHUB_TOKEN"] = "ghp_secret123"
+        expect(config.git_token).to eq("ghp_secret123")
+        ENV.delete("GITHUB_TOKEN")
+      end
+    end
+
+    describe "#git_clone_enabled?" do
+      it "returns false when git repository not configured" do
+        config = described_class.new(valid_config_hash)
+        expect(config.git_clone_enabled?).to be false
+      end
+
+      it "returns false when git repository is empty string" do
+        config_with_empty_git = valid_config_hash.merge(
+          "git" => {"repository" => ""}
+        )
+        config = described_class.new(config_with_empty_git)
+        expect(config.git_clone_enabled?).to be false
+      end
+
+      it "returns true when git repository is configured" do
+        config_with_git = valid_config_hash.merge(
+          "git" => {"repository" => "https://github.com/user/repo.git"}
+        )
+        config = described_class.new(config_with_git)
+        expect(config.git_clone_enabled?).to be true
+      end
+    end
+  end
 end

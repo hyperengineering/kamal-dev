@@ -477,10 +477,12 @@ RSpec.describe Kamal::Cli::Dev do
         end
 
         # Verify build was called with correct parameters
+        # Context ".." is now resolved to absolute path relative to compose file
+        expected_context = File.expand_path("..", File.dirname(compose_path))
         expect(builder).to have_received(:build).with(
           hash_including(
             dockerfile: ".devcontainer/Dockerfile",
-            context: "..",
+            context: expected_context,
             image_base: "myorg/myapp"
           )
         )

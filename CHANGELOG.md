@@ -1,5 +1,144 @@
 ## [Unreleased]
 
+## [0.3.0] - 2025-11-22
+
+### Added - DevPod-Style Remote Development with Git Clone
+
+#### Remote Code Sync Feature
+- **Git Clone Integration** for DevPod-style remote development
+  - Code is cloned from git repository into containers (instead of mounted from local machine)
+  - Supports private repositories via GitHub Personal Access Token (PAT)
+  - Automatic credential caching for git operations (pull/push)
+  - Works seamlessly alongside local VS Code devcontainer workflow (auto-detects deployment vs local)
+  - Pure cloud deployment capability - no local file mounting required
+
+- **Configuration Options** (`config/dev.yml`)
+  ```yaml
+  git:
+    repository: https://github.com/user/repo.git  # Git repository URL (HTTPS format)
+    branch: main                                   # Branch to checkout (default: main)
+    workspace_folder: /workspaces/myapp           # Where to clone code
+    token: GITHUB_TOKEN                           # Environment variable name for PAT
+  ```
+
+- **Entrypoint Script Injection** (`dev-entrypoint.sh`)
+  - Automatically injected into Docker images during build when git clone is configured
+  - Clones repository on first container startup
+  - Handles authentication via token injection into HTTPS URL
+  - Configures git credential helper for persistent authentication
+  - Skips clone operation for local VS Code devcontainers (uses mounted code)
+  - Creates `/workspaces` directory with proper ownership for non-root users
+
+- **Token-Based Authentication**
+  - HTTPS git cloning with GitHub Personal Access Token
+  - Simpler and more robust than SSH key-based authentication
+  - Single-line environment variable (no multi-line key handling issues)
+  - Token loaded from `.kamal/secrets` via environment variable
+  - Automatic validation before deployment with helpful error messages
+
+- **Deployment Validation**
+  - Pre-deployment git configuration validation
+  - Errors if token ENV var configured but not set (prevents silent failures)
+  - Warns when using public repository without token
+  - Provides actionable error messages with setup instructions
+  - Skips validation for SSH URLs (git@github.com:...)
+
+- **Compose File Transformation**
+  - Automatic injection of git environment variables into compose services
+  - Environment variables set for remote deployments:
+    - `KAMAL_DEV_GIT_REPO` - Repository URL
+    - `KAMAL_DEV_GIT_BRANCH` - Branch name
+    - `KAMAL_DEV_WORKSPACE_FOLDER` - Workspace path
+    - `KAMAL_DEV_GIT_TOKEN` - Authentication token (if configured)
+  - Preserves existing environment variables
+  - Only injects variables when git clone is enabled
+
+### Changed
+- **Image Build Process**
+  - Wrapper Dockerfile generation when git clone is enabled
+  - Entrypoint script copied with execute permissions (755)
+  - `/workspaces` directory created with proper ownership (vscode:vscode)
+  - Original Dockerfile extended with git clone functionality
+  - Build artifacts automatically cleaned up after build
+
+- **ComposeParser** (`lib/kamal/dev/compose_parser.rb`)
+  - Enhanced `transform_for_deployment` to accept optional config parameter
+  - Git environment variables injected when config provided
+  - Context paths now resolved relative to compose file location (fixes relative path issues)
+
+### Documentation
+- **README.md** - Comprehensive "Remote Code Sync (DevPod-Style)" section:
+  - How it works (build → startup → clone workflow)
+  - Step-by-step GitHub PAT setup instructions
+  - Configuration examples
+  - Verification commands
+  - Troubleshooting guide with common issues
+  - Important notes about HTTPS URLs, token security, and local development
+
+### Testing
+- **30 New Tests** (336 total examples, 0 failures)
+  - **ComposeParser Tests** (5 tests): Git environment variable injection
+    - Validates injection when git clone enabled
+    - Verifies environment variable preservation
+    - Tests no injection when disabled
+    - Handles missing token gracefully
+    - Creates environment section when missing
+  - **Config Tests** (16 tests): Git configuration methods
+    - `git_repository`, `git_branch`, `git_workspace_folder`
+    - `git_token_env`, `git_token` (with ENV loading)
+    - `git_clone_enabled?` validation logic
+    - Default values and edge cases
+  - **CLI Validation Tests** (9 tests): Token validation before deployment
+    - Successful validation with token
+    - Error on missing ENV var
+    - Warning for public repos
+    - SSH URL handling
+    - Edge cases (nil, empty string)
+
+### Technical Details
+- **Authentication Method**: GitHub Personal Access Token (PAT) via HTTPS
+  - Replaces earlier SSH key approach (simpler, more robust)
+  - No multi-line environment variable handling issues
+  - Works consistently across all shells and environments
+- **Token Scopes Required**: `repo` scope for private repositories
+- **Supported Git Hosts**: Any HTTPS-based git hosting (GitHub, GitLab, Bitbucket, etc.)
+- **Supported URL Formats**: HTTPS only (`https://github.com/user/repo.git`)
+- **Local Development**: Git clone automatically skipped when environment variables not present
+
+### Examples
+
+#### Private Repository Configuration
+```yaml
+# config/dev.yml
+git:
+  repository: https://github.com/myorg/private-repo.git
+  branch: main
+  workspace_folder: /workspaces/myapp
+  token: GITHUB_TOKEN
+
+# .kamal/secrets
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
+```
+
+#### Deploy and Verify
+```bash
+kamal dev deploy --count 2
+
+# Verify git clone succeeded
+ssh root@<vm-ip>
+docker logs myapp-dev-1-app
+
+# Output:
+# [kamal-dev] Remote deployment detected
+# [kamal-dev] Cloning https://github.com/myorg/private-repo.git (branch: main)
+# [kamal-dev] Clone complete: /workspaces/myapp
+```
+
+### Migration Notes
+- Existing deployments without git configuration continue to work unchanged
+- Git clone is opt-in via `git:` section in `config/dev.yml`
+- No breaking changes to existing functionality
+
 ## [0.2.0] - 2025-11-18
 
 ### Added - Epic 2: Docker Compose & Build Support
