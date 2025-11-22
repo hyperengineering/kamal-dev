@@ -199,31 +199,28 @@ module Kamal
       # @param config [Kamal::Dev::Config] Configuration with git settings
       # @return [String] Bash script as single command
       def build_git_clone_wrapper(original_command, config)
-        # Inline bash script that:
-        # 1. Checks if KAMAL_DEV_GIT_REPO is set (kamal-dev deployment)
-        # 2. If yes and workspace is empty, clones the repo
-        # 3. Execs the original command
-        # Use single-quote heredoc to prevent Ruby interpolation of $VARS
-        # Return as string - Docker Compose will handle it properly
-        script = <<~'BASH'.chomp
-          if [ -n "$KAMAL_DEV_GIT_REPO" ]; then
-            echo "[kamal-dev] Remote deployment detected"
-            if [ ! -d "$KAMAL_DEV_WORKSPACE_FOLDER/.git" ]; then
-              echo "[kamal-dev] Cloning $KAMAL_DEV_GIT_REPO (branch: $KAMAL_DEV_GIT_BRANCH)"
-              mkdir -p "$KAMAL_DEV_WORKSPACE_FOLDER"
-              git clone --depth 1 --branch "$KAMAL_DEV_GIT_BRANCH" "$KAMAL_DEV_GIT_REPO" "$KAMAL_DEV_WORKSPACE_FOLDER"
-              echo "[kamal-dev] Clone complete"
-            else
-              echo "[kamal-dev] Repository already cloned, pulling latest changes"
-              cd "$KAMAL_DEV_WORKSPACE_FOLDER" && git pull
-            fi
-          else
-            echo "[kamal-dev] Local development mode (code mounted, not cloned)"
-          fi
-          exec ORIGINAL_COMMAND_PLACEHOLDER
-        BASH
-        # Replace placeholder with actual command, wrap in sh -c for proper execution
-        "sh -c " + (script.gsub("ORIGINAL_COMMAND_PLACEHOLDER", original_command).dump)
+        # Build inline bash script with semicolons (single line for shell compatibility)
+        # Use single quotes in heredoc to prevent Ruby interpolation
+        # Format as single line with semicolons between commands for shell execution
+        [
+          "sh",
+          "-c",
+          'if [ -n "$KAMAL_DEV_GIT_REPO" ]; then ' \
+            'echo "[kamal-dev] Remote deployment detected"; ' \
+            'if [ ! -d "$KAMAL_DEV_WORKSPACE_FOLDER/.git" ]; then ' \
+              'echo "[kamal-dev] Cloning $KAMAL_DEV_GIT_REPO (branch: $KAMAL_DEV_GIT_BRANCH)"; ' \
+              'mkdir -p "$KAMAL_DEV_WORKSPACE_FOLDER"; ' \
+              'git clone --depth 1 --branch "$KAMAL_DEV_GIT_BRANCH" "$KAMAL_DEV_GIT_REPO" "$KAMAL_DEV_WORKSPACE_FOLDER"; ' \
+              'echo "[kamal-dev] Clone complete"; ' \
+            'else ' \
+              'echo "[kamal-dev] Repository already cloned, pulling latest changes"; ' \
+              'cd "$KAMAL_DEV_WORKSPACE_FOLDER" && git pull; ' \
+            'fi; ' \
+          'else ' \
+            'echo "[kamal-dev] Local development mode (code mounted, not cloned)"; ' \
+          'fi; ' \
+          "exec #{original_command}"
+        ]
       end
 
       # Load and parse compose YAML file
