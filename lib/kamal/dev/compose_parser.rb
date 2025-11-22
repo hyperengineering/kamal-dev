@@ -203,26 +203,29 @@ module Kamal
         # 1. Checks if KAMAL_DEV_GIT_REPO is set (kamal-dev deployment)
         # 2. If yes and workspace is empty, clones the repo
         # 3. Execs the original command
-        # IMPORTANT: Escape $ to prevent Ruby interpolation, preserve for bash runtime
-        <<~BASH.strip
+        # Use single-quote heredoc to prevent Ruby interpolation of $VARS
+        # Then manually interpolate only the original_command at the end
+        script = <<~'BASH'.strip
           bash -c '
-            if [ -n "\\$KAMAL_DEV_GIT_REPO" ]; then
+            if [ -n "$KAMAL_DEV_GIT_REPO" ]; then
               echo "[kamal-dev] Remote deployment detected"
-              if [ ! -d "\\$KAMAL_DEV_WORKSPACE_FOLDER/.git" ]; then
-                echo "[kamal-dev] Cloning \\$KAMAL_DEV_GIT_REPO (branch: \\$KAMAL_DEV_GIT_BRANCH)"
-                mkdir -p "\\$KAMAL_DEV_WORKSPACE_FOLDER"
-                git clone --depth 1 --branch "\\$KAMAL_DEV_GIT_BRANCH" "\\$KAMAL_DEV_GIT_REPO" "\\$KAMAL_DEV_WORKSPACE_FOLDER"
+              if [ ! -d "$KAMAL_DEV_WORKSPACE_FOLDER/.git" ]; then
+                echo "[kamal-dev] Cloning $KAMAL_DEV_GIT_REPO (branch: $KAMAL_DEV_GIT_BRANCH)"
+                mkdir -p "$KAMAL_DEV_WORKSPACE_FOLDER"
+                git clone --depth 1 --branch "$KAMAL_DEV_GIT_BRANCH" "$KAMAL_DEV_GIT_REPO" "$KAMAL_DEV_WORKSPACE_FOLDER"
                 echo "[kamal-dev] Clone complete"
               else
                 echo "[kamal-dev] Repository already cloned, pulling latest changes"
-                cd "\\$KAMAL_DEV_WORKSPACE_FOLDER" && git pull
+                cd "$KAMAL_DEV_WORKSPACE_FOLDER" && git pull
               fi
             else
               echo "[kamal-dev] Local development mode (code mounted, not cloned)"
             fi
-            exec #{original_command}
+            exec ORIGINAL_COMMAND_PLACEHOLDER
           '
         BASH
+        # Replace placeholder with actual command
+        script.gsub("ORIGINAL_COMMAND_PLACEHOLDER", original_command)
       end
 
       # Load and parse compose YAML file
