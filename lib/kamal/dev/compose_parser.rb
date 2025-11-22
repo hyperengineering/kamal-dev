@@ -179,10 +179,10 @@ module Kamal
         # Initialize environment hash if not present
         service_config["environment"] ||= {}
 
-        # Inject git clone environment variables
+        # Inject git clone environment variables (all must go in environment section)
         service_config["environment"]["KAMAL_DEV_GIT_REPO"] = config.git_repository
         service_config["environment"]["KAMAL_DEV_GIT_BRANCH"] = config.git_branch
-        service_config["KAMAL_DEV_WORKSPACE_FOLDER"] = config.git_workspace_folder
+        service_config["environment"]["KAMAL_DEV_WORKSPACE_FOLDER"] = config.git_workspace_folder
 
         # Get original command (or default to sleep infinity)
         original_command = service_config["command"] || "sleep infinity"
@@ -199,24 +199,23 @@ module Kamal
       # @param config [Kamal::Dev::Config] Configuration with git settings
       # @return [String] Bash script as single command
       def build_git_clone_wrapper(original_command, config)
-        workspace = config.git_workspace_folder
-
         # Inline bash script that:
         # 1. Checks if KAMAL_DEV_GIT_REPO is set (kamal-dev deployment)
         # 2. If yes and workspace is empty, clones the repo
         # 3. Execs the original command
+        # Uses env vars at runtime, not hardcoded Ruby interpolation
         <<~BASH.strip
           bash -c '
             if [ -n "$KAMAL_DEV_GIT_REPO" ]; then
               echo "[kamal-dev] Remote deployment detected"
-              if [ ! -d "#{workspace}/.git" ]; then
+              if [ ! -d "$KAMAL_DEV_WORKSPACE_FOLDER/.git" ]; then
                 echo "[kamal-dev] Cloning $KAMAL_DEV_GIT_REPO (branch: $KAMAL_DEV_GIT_BRANCH)"
-                mkdir -p #{workspace}
-                git clone --depth 1 --branch "$KAMAL_DEV_GIT_BRANCH" "$KAMAL_DEV_GIT_REPO" #{workspace}
+                mkdir -p "$KAMAL_DEV_WORKSPACE_FOLDER"
+                git clone --depth 1 --branch "$KAMAL_DEV_GIT_BRANCH" "$KAMAL_DEV_GIT_REPO" "$KAMAL_DEV_WORKSPACE_FOLDER"
                 echo "[kamal-dev] Clone complete"
               else
                 echo "[kamal-dev] Repository already cloned, pulling latest changes"
-                cd #{workspace} && git pull
+                cd "$KAMAL_DEV_WORKSPACE_FOLDER" && git pull
               fi
             else
               echo "[kamal-dev] Local development mode (code mounted, not cloned)"
