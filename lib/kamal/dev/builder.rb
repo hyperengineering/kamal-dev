@@ -234,8 +234,8 @@ module Kamal
           #{original_content}
 
           # Kamal Dev: Inject entrypoint for git clone functionality
-          COPY dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
-          RUN chmod +x /usr/local/bin/dev-entrypoint.sh
+          # Use --chmod to set permissions during COPY (avoids permission issues)
+          COPY --chmod=755 dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
           ENTRYPOINT ["/usr/local/bin/dev-entrypoint.sh"]
         DOCKERFILE
       end
