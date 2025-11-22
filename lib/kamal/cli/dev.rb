@@ -836,7 +836,7 @@ module Kamal
         #
         # Authenticates Docker on remote VMs with the configured registry.
         # Required before pulling private images in compose deployments.
-        # Uses --password-stdin for secure password transmission.
+        # Uses same approach as base Kamal: direct password with -p flag.
         #
         # @param ips [Array<String>] VM IP addresses
         # @param registry [Kamal::Dev::Registry] Registry configuration
@@ -847,19 +847,15 @@ module Kamal
             return
           end
 
-          # Build complete pipeline command with proper shell quoting
-          # Single quotes prevent shell expansion; escape any single quotes in values
-          password_safe = registry.password.to_s.gsub("'", "'\\''")
-          username_safe = registry.username.to_s.gsub("'", "'\\''")
-          server_safe = registry.server.to_s.gsub("'", "'\\''")
-
-          # Entire pipeline must be within the sh -c argument
-          login_command = "echo '#{password_safe}' | docker login '#{server_safe}' -u '#{username_safe}' --password-stdin"
+          # Use Kamal's escaping approach: .dump handles all special chars
+          # This matches how base Kamal does registry login
+          username_escaped = registry.username.to_s.dump.gsub(/`/, '\\\\`')
+          password_escaped = registry.password.to_s.dump.gsub(/`/, '\\\\`')
 
           on(prepare_hosts(ips)) do
-            # Use --password-stdin for secure password transmission
-            # The entire pipeline must be within the sh -c command
-            execute :sh, "-c", login_command
+            # Execute docker login with -u and -p flags (same as base Kamal)
+            # SSHKit will properly quote arguments when passed as separate elements
+            execute "docker", "login", registry.server, "-u", username_escaped, "-p", password_escaped
           end
         end
 
