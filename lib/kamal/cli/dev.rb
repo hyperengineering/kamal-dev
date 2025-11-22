@@ -889,8 +889,8 @@ module Kamal
 
           # Use Kamal's escaping approach: .dump handles all special chars
           # This matches how base Kamal does registry login
-          username_escaped = registry.username.to_s.dump.gsub(/`/, '\\\\`')
-          password_escaped = registry.password.to_s.dump.gsub(/`/, '\\\\`')
+          username_escaped = registry.username.to_s.dump.gsub("`", '\\\\`')
+          password_escaped = registry.password.to_s.dump.gsub("`", '\\\\`')
 
           on(prepare_hosts(ips)) do
             # Execute docker login with -u and -p flags (same as base Kamal)

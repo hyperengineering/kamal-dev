@@ -176,7 +176,7 @@ module Kamal
           entrypoint_template = File.expand_path("../templates/dev-entrypoint.sh", __FILE__)
           entrypoint_dest = File.join(temp_dir, "dev-entrypoint.sh")
           FileUtils.cp(entrypoint_template, entrypoint_dest)
-          FileUtils.chmod(0755, entrypoint_dest)
+          FileUtils.chmod(0o755, entrypoint_dest)
 
           # Resolve paths to absolute
           context_abs = File.expand_path(context)
@@ -216,16 +216,14 @@ module Kamal
       def generate_wrapper_dockerfile(original_dockerfile)
         # Read original Dockerfile to extract final image
         # Use multi-stage build: stage 1 = original, stage 2 = add entrypoint
-        <<~DOCKERFILE
-          # Stage 1: Build original image
-          FROM scratch AS original-dockerfile
-          # This is a placeholder - we'll build from the original file
+        # Stage 1: Build original image
+        FROM scratch AS original - dockerfile
+        # This is a placeholder - we'll build from the original file
 
-          # We can't easily include another Dockerfile, so we'll use a different approach
-          # Build the original image first, then extend it
+        # We can't easily include another Dockerfile, so we'll use a different approach
+        # Build the original image first, then extend it
 
-          # Actually, simpler approach: read the original and inline it
-        DOCKERFILE
+        # Actually, simpler approach: read the original and inline it
 
         # Better approach: Just extend the original Dockerfile directly
         original_content = File.read(original_dockerfile)
