@@ -155,6 +155,10 @@ module Kamal
       def build_command(dockerfile:, context:, image:, build_args: {}, secrets: {})
         cmd = ["docker", "build"]
 
+        # Add platform flag for cross-platform compatibility
+        # Cloud VMs are typically linux/amd64, even when building on arm64 (Mac)
+        cmd += ["--platform", "linux/amd64"]
+
         # Add dockerfile flag
         cmd += ["-f", dockerfile] if dockerfile != "Dockerfile"
 

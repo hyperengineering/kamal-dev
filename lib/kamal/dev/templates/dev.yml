@@ -65,6 +65,14 @@ secrets:
 ssh:
   key_path: ~/.ssh/id_rsa.pub  # SSH public key for VM access (default: ~/.ssh/id_rsa.pub)
 
+# Git clone configuration (for DevPod-style remote development)
+# When configured, code is cloned from GitHub on deployment
+# Local devcontainer usage (VS Code) is unaffected - uses mounted code
+git:
+  repository: https://github.com/yourorg/yourrepo.git  # Git repository URL
+  branch: main                                         # Branch to checkout (default: main)
+  workspace_folder: /workspaces/myapp                  # Where to clone code (should match devcontainer workspaceFolder)
+
 # Default resource limits for containers
 defaults:
   cpus: 2                    # CPU limit (cores)

@@ -114,6 +114,42 @@ module Kamal
         ssh["key_path"] || "~/.ssh/id_rsa.pub"
       end
 
+      # Git configuration for remote code cloning
+      #
+      # @return [Hash] Git configuration (repository, branch, workspace_folder)
+      def git
+        raw_config[:git]&.deep_stringify_keys || {}
+      end
+
+      # Git repository URL to clone on remote deployment
+      #
+      # @return [String, nil] Git repository URL
+      def git_repository
+        git["repository"]
+      end
+
+      # Git branch to checkout (defaults to main)
+      #
+      # @return [String] Git branch name
+      def git_branch
+        git["branch"] || "main"
+      end
+
+      # Workspace folder where code should be cloned
+      # Typically matches the workspaceFolder in devcontainer.json
+      #
+      # @return [String] Workspace folder path
+      def git_workspace_folder
+        git["workspace_folder"] || "/workspaces/#{service}"
+      end
+
+      # Check if git clone is configured for remote deployments
+      #
+      # @return [Boolean] true if git repository is configured
+      def git_clone_enabled?
+        !git_repository.nil? && !git_repository.empty?
+      end
+
       # Registry configuration for image building and pushing
       #
       # @return [Hash] Registry configuration (server, username_env, password_env)

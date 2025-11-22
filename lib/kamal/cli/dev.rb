@@ -345,8 +345,12 @@ module Kamal
 
           # Transform compose file
           puts "Transforming compose file..."
-          transformed_yaml = compose_parser.transform_for_deployment(image_ref)
-          puts "✓ Transformed compose.yaml (build → image)"
+          transformed_yaml = compose_parser.transform_for_deployment(image_ref, config: config)
+          if config.git_clone_enabled?
+            puts "✓ Transformed compose.yaml (build → image, git clone enabled)"
+          else
+            puts "✓ Transformed compose.yaml (build → image)"
+          end
           puts
 
           # Estimate cost and get confirmation
@@ -804,10 +808,10 @@ module Kamal
         def bootstrap_docker(ips)
           on(prepare_hosts(ips)) do
             # Check if Docker is already installed
-            # Note: execute with raise_on_non_zero_exit: false returns false on failure
-            docker_installed = execute("command", "-v", "docker", raise_on_non_zero_exit: false)
+            # Use 'which' instead of 'command -v' since command is a shell builtin
+            docker_installed = test("which", "docker")
 
-            unless docker_installed && !docker_installed.to_s.strip.empty?
+            unless docker_installed
               puts "Installing Docker..."
               execute "curl", "-fsSL", "https://get.docker.com", "|", "sh"
               execute "systemctl", "start", "docker"
@@ -815,17 +819,16 @@ module Kamal
             end
 
             # Check if Docker Compose v2 is installed
-            compose_installed = execute("docker", "compose", "version", raise_on_non_zero_exit: false)
+            compose_installed = test("docker", "compose", "version")
 
-            unless compose_installed && !compose_installed.to_s.strip.empty?
+            unless compose_installed
               puts "Installing Docker Compose v2..."
               # Install docker-compose-plugin (works on Ubuntu/Debian)
               execute "apt-get", "update", raise_on_non_zero_exit: false
               execute "apt-get", "install", "-y", "docker-compose-plugin", raise_on_non_zero_exit: false
 
               # Verify installation succeeded
-              compose_check = execute("docker", "compose", "version", raise_on_non_zero_exit: false)
-              unless compose_check && !compose_check.to_s.strip.empty?
+              unless test("docker", "compose", "version")
                 raise Kamal::Dev::ConfigurationError, "Docker Compose v2 installation failed. Please install manually."
               end
             end

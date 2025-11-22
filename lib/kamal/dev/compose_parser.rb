@@ -116,12 +116,15 @@ module Kamal
       # Transform compose file for deployment
       #
       # Replaces build: sections with image: references pointing to
-      # the pushed registry image. Preserves all other service properties.
+      # the pushed registry image. Removes local bind mounts (DevPod-style).
+      # Optionally injects git clone functionality for remote deployments.
+      # Preserves named volumes and other service properties.
       #
       # @param image_ref [String] Full image reference (e.g., "ghcr.io/user/app:tag")
+      # @param config [Kamal::Dev::Config] Optional config for git clone setup
       # @return [String] Transformed YAML content
       # @raise [Kamal::Dev::ConfigurationError] if transformation fails
-      def transform_for_deployment(image_ref)
+      def transform_for_deployment(image_ref, config: nil)
         transformed = deep_copy(compose_data)
         main = main_service
 
@@ -131,6 +134,29 @@ module Kamal
 
           # Add image reference
           transformed["services"][main]["image"] = image_ref
+
+          # Remove local bind mounts (DevPod-style: code will be cloned, not mounted)
+          # Keep named volumes (databases, caches, etc.)
+          if transformed["services"][main]["volumes"]
+            transformed["services"][main]["volumes"] = transformed["services"][main]["volumes"].reject do |volume|
+              # Reject if it's a bind mount (contains ":" and first part is a path)
+              if volume.is_a?(String) && volume.include?(":")
+                source, _target = volume.split(":", 2)
+                # Named volumes don't start with . or / or ~
+                source.start_with?(".", "/", "~")
+              else
+                false
+              end
+            end
+
+            # Remove volumes array if empty
+            transformed["services"][main].delete("volumes") if transformed["services"][main]["volumes"].empty?
+          end
+
+          # Inject git clone functionality if configured
+          if config&.git_clone_enabled?
+            inject_git_clone!(transformed["services"][main], config)
+          end
         end
 
         # Convert back to YAML
@@ -140,6 +166,65 @@ module Kamal
       end
 
       private
+
+      # Inject git clone functionality into service configuration
+      #
+      # Adds environment variables and wraps command with git clone script.
+      # Only executes clone if KAMAL_DEV_GIT_REPO is set (remote deployment).
+      # Local devcontainers won't have these vars, so they use mounted code.
+      #
+      # @param service_config [Hash] Service configuration to modify
+      # @param config [Kamal::Dev::Config] Configuration with git settings
+      def inject_git_clone!(service_config, config)
+        # Initialize environment hash if not present
+        service_config["environment"] ||= {}
+
+        # Inject git clone environment variables
+        service_config["environment"]["KAMAL_DEV_GIT_REPO"] = config.git_repository
+        service_config["environment"]["KAMAL_DEV_GIT_BRANCH"] = config.git_branch
+        service_config["KAMAL_DEV_WORKSPACE_FOLDER"] = config.git_workspace_folder
+
+        # Get original command (or default to sleep infinity)
+        original_command = service_config["command"] || "sleep infinity"
+
+        # Wrap command with git clone script
+        # This only runs on kamal-dev deployments (env vars present)
+        # Local devcontainers won't have these vars, so script is skipped
+        service_config["command"] = build_git_clone_wrapper(original_command, config)
+      end
+
+      # Build bash script that clones git repo before running original command
+      #
+      # @param original_command [String] Original container command
+      # @param config [Kamal::Dev::Config] Configuration with git settings
+      # @return [String] Bash script as single command
+      def build_git_clone_wrapper(original_command, config)
+        workspace = config.git_workspace_folder
+
+        # Inline bash script that:
+        # 1. Checks if KAMAL_DEV_GIT_REPO is set (kamal-dev deployment)
+        # 2. If yes and workspace is empty, clones the repo
+        # 3. Execs the original command
+        <<~BASH.strip
+          bash -c '
+            if [ -n "$KAMAL_DEV_GIT_REPO" ]; then
+              echo "[kamal-dev] Remote deployment detected"
+              if [ ! -d "#{workspace}/.git" ]; then
+                echo "[kamal-dev] Cloning $KAMAL_DEV_GIT_REPO (branch: $KAMAL_DEV_GIT_BRANCH)"
+                mkdir -p #{workspace}
+                git clone --depth 1 --branch "$KAMAL_DEV_GIT_BRANCH" "$KAMAL_DEV_GIT_REPO" #{workspace}
+                echo "[kamal-dev] Clone complete"
+              else
+                echo "[kamal-dev] Repository already cloned, pulling latest changes"
+                cd #{workspace} && git pull
+              fi
+            else
+              echo "[kamal-dev] Local development mode (code mounted, not cloned)"
+            fi
+            exec #{original_command}
+          '
+        BASH
+      end
 
       # Load and parse compose YAML file
       #
