@@ -10,9 +10,6 @@ end
 # Specify your gem's dependencies in kamal-dev.gemspec
 gemspec
 
-# Development: ensure our gem is auto-required when running kamal commands
-require_relative "lib/kamal-dev"
-
 gem "irb"
 gem "rake", "~> 13.0"
 
