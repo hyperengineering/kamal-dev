@@ -847,13 +847,14 @@ module Kamal
             return
           end
 
-          # Pre-escape values for shell command
-          password_escaped = Shellwords.escape(registry.password.to_s)
-          username_escaped = Shellwords.escape(registry.username.to_s)
-          server_escaped = Shellwords.escape(registry.server.to_s)
+          # Build complete pipeline command with proper shell quoting
+          # Single quotes prevent shell expansion; escape any single quotes in values
+          password_safe = registry.password.to_s.gsub("'", "'\\''")
+          username_safe = registry.username.to_s.gsub("'", "'\\''")
+          server_safe = registry.server.to_s.gsub("'", "'\\''")
 
-          # Build the complete shell command with pipe inside the sh -c string
-          login_command = "echo #{password_escaped} | docker login #{server_escaped} -u #{username_escaped} --password-stdin"
+          # Entire pipeline must be within the sh -c argument
+          login_command = "echo '#{password_safe}' | docker login '#{server_safe}' -u '#{username_safe}' --password-stdin"
 
           on(prepare_hosts(ips)) do
             # Use --password-stdin for secure password transmission
