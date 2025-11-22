@@ -53,15 +53,26 @@ module Kamal
           registry.image_tag(config.service, tag)
         end
 
-        command = build_command(
-          dockerfile: dockerfile,
-          context: context,
-          image: image_ref,
-          build_args: build_args,
-          secrets: secrets
-        )
+        # If git clone is enabled, wrap Dockerfile with entrypoint injection
+        if config.git_clone_enabled?
+          build_with_entrypoint(
+            dockerfile: dockerfile,
+            context: context,
+            image: image_ref,
+            build_args: build_args,
+            secrets: secrets
+          )
+        else
+          command = build_command(
+            dockerfile: dockerfile,
+            context: context,
+            image: image_ref,
+            build_args: build_args,
+            secrets: secrets
+          )
 
-        execute_with_output(command, "Building image #{image_ref}...")
+          execute_with_output(command, "Building image #{image_ref}...")
+        end
 
         image_ref
       end
@@ -143,6 +154,89 @@ module Kamal
       end
 
       private
+
+      # Build image with kamal-dev entrypoint injected
+      #
+      # Creates a temporary wrapper Dockerfile that:
+      # 1. Builds from the original Dockerfile
+      # 2. Injects the dev-entrypoint.sh script
+      # 3. Sets it as the container entrypoint
+      #
+      # @param dockerfile [String] Original Dockerfile path
+      # @param context [String] Build context
+      # @param image [String] Target image name with tag
+      # @param build_args [Hash] Build arguments
+      # @param secrets [Hash] Build secrets
+      def build_with_entrypoint(dockerfile:, context:, image:, build_args: {}, secrets: {})
+        require "tmpdir"
+        require "fileutils"
+
+        Dir.mktmpdir("kamal-dev-build") do |temp_dir|
+          # Copy entrypoint script to temp directory
+          entrypoint_template = File.expand_path("../templates/dev-entrypoint.sh", __FILE__)
+          entrypoint_dest = File.join(temp_dir, "dev-entrypoint.sh")
+          FileUtils.cp(entrypoint_template, entrypoint_dest)
+          FileUtils.chmod(0755, entrypoint_dest)
+
+          # Create wrapper Dockerfile
+          wrapper_dockerfile = File.join(temp_dir, "Dockerfile.kamal-dev")
+          original_dockerfile_path = File.join(context, dockerfile)
+
+          File.write(wrapper_dockerfile, generate_wrapper_dockerfile(original_dockerfile_path))
+
+          # Copy wrapper to context so docker build can access it
+          FileUtils.cp(wrapper_dockerfile, File.join(context, "Dockerfile.kamal-dev"))
+          FileUtils.cp(entrypoint_dest, File.join(context, "dev-entrypoint.sh"))
+
+          begin
+            # Build using wrapper Dockerfile
+            command = build_command(
+              dockerfile: "Dockerfile.kamal-dev",
+              context: context,
+              image: image,
+              build_args: build_args,
+              secrets: secrets
+            )
+
+            execute_with_output(command, "Building image with kamal-dev entrypoint #{image}...")
+          ensure
+            # Cleanup temporary files from context
+            FileUtils.rm_f(File.join(context, "Dockerfile.kamal-dev"))
+            FileUtils.rm_f(File.join(context, "dev-entrypoint.sh"))
+          end
+        end
+      end
+
+      # Generate wrapper Dockerfile content
+      #
+      # @param original_dockerfile [String] Path to original Dockerfile
+      # @return [String] Wrapper Dockerfile content
+      def generate_wrapper_dockerfile(original_dockerfile)
+        # Read original Dockerfile to extract final image
+        # Use multi-stage build: stage 1 = original, stage 2 = add entrypoint
+        <<~DOCKERFILE
+          # Stage 1: Build original image
+          FROM scratch AS original-dockerfile
+          # This is a placeholder - we'll build from the original file
+
+          # We can't easily include another Dockerfile, so we'll use a different approach
+          # Build the original image first, then extend it
+
+          # Actually, simpler approach: read the original and inline it
+        DOCKERFILE
+
+        # Better approach: Just extend the original Dockerfile directly
+        original_content = File.read(original_dockerfile)
+
+        <<~DOCKERFILE
+          #{original_content}
+
+          # Kamal Dev: Inject entrypoint for git clone functionality
+          COPY dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
+          RUN chmod +x /usr/local/bin/dev-entrypoint.sh
+          ENTRYPOINT ["/usr/local/bin/dev-entrypoint.sh"]
+        DOCKERFILE
+      end
 
       # Build docker build command
       #

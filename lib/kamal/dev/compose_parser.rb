@@ -153,9 +153,10 @@ module Kamal
             transformed["services"][main].delete("volumes") if transformed["services"][main]["volumes"].empty?
           end
 
-          # Inject git clone functionality if configured
+          # Inject git clone environment variables if configured
+          # The actual cloning is handled by the entrypoint script in the image
           if config&.git_clone_enabled?
-            inject_git_clone!(transformed["services"][main], config)
+            inject_git_env_vars!(transformed["services"][main], config)
           end
         end
 
@@ -167,60 +168,23 @@ module Kamal
 
       private
 
-      # Inject git clone functionality into service configuration
+      # Inject git clone environment variables into service configuration
       #
-      # Adds environment variables and wraps command with git clone script.
-      # Only executes clone if KAMAL_DEV_GIT_REPO is set (remote deployment).
-      # Local devcontainers won't have these vars, so they use mounted code.
+      # The entrypoint script in the Docker image will use these variables
+      # to clone the repository. Local devcontainers won't have these vars set,
+      # so they'll use mounted code instead.
       #
       # @param service_config [Hash] Service configuration to modify
       # @param config [Kamal::Dev::Config] Configuration with git settings
-      def inject_git_clone!(service_config, config)
+      def inject_git_env_vars!(service_config, config)
         # Initialize environment hash if not present
         service_config["environment"] ||= {}
 
-        # Inject git clone environment variables (all must go in environment section)
+        # Inject git clone environment variables
+        # These are used by /usr/local/bin/dev-entrypoint.sh in the image
         service_config["environment"]["KAMAL_DEV_GIT_REPO"] = config.git_repository
         service_config["environment"]["KAMAL_DEV_GIT_BRANCH"] = config.git_branch
         service_config["environment"]["KAMAL_DEV_WORKSPACE_FOLDER"] = config.git_workspace_folder
-
-        # Get original command (or default to sleep infinity)
-        original_command = service_config["command"] || "sleep infinity"
-
-        # Wrap command with git clone script
-        # This only runs on kamal-dev deployments (env vars present)
-        # Local devcontainers won't have these vars, so script is skipped
-        service_config["command"] = build_git_clone_wrapper(original_command, config)
-      end
-
-      # Build bash script that clones git repo before running original command
-      #
-      # @param original_command [String] Original container command
-      # @param config [Kamal::Dev::Config] Configuration with git settings
-      # @return [String] Bash script as single command
-      def build_git_clone_wrapper(original_command, config)
-        # Build inline bash script with semicolons (single line for shell compatibility)
-        # Use single quotes in heredoc to prevent Ruby interpolation
-        # Format as single line with semicolons between commands for shell execution
-        [
-          "sh",
-          "-c",
-          'if [ -n "$KAMAL_DEV_GIT_REPO" ]; then ' \
-            'echo "[kamal-dev] Remote deployment detected"; ' \
-            'if [ ! -d "$KAMAL_DEV_WORKSPACE_FOLDER/.git" ]; then ' \
-              'echo "[kamal-dev] Cloning $KAMAL_DEV_GIT_REPO (branch: $KAMAL_DEV_GIT_BRANCH)"; ' \
-              'mkdir -p "$KAMAL_DEV_WORKSPACE_FOLDER"; ' \
-              'git clone --depth 1 --branch "$KAMAL_DEV_GIT_BRANCH" "$KAMAL_DEV_GIT_REPO" "$KAMAL_DEV_WORKSPACE_FOLDER"; ' \
-              'echo "[kamal-dev] Clone complete"; ' \
-            'else ' \
-              'echo "[kamal-dev] Repository already cloned, pulling latest changes"; ' \
-              'cd "$KAMAL_DEV_WORKSPACE_FOLDER" && git pull; ' \
-            'fi; ' \
-          'else ' \
-            'echo "[kamal-dev] Local development mode (code mounted, not cloned)"; ' \
-          'fi; ' \
-          "exec #{original_command}"
-        ]
       end
 
       # Load and parse compose YAML file
