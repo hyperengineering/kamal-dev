@@ -1,8 +1,8 @@
-# Kamal::Dev
+# `kamal-dev`
 
 **Scale your development capacity horizontally with cloud-powered devcontainer workspaces.**
 
-Kamal::Dev extends [Kamal](https://github.com/basecamp/kamal) to deploy and manage development container workspaces to cloud infrastructure. Deploy multiple parallel development environments for AI-assisted development, remote pair programming, or horizontal scaling of development tasks.
+`kamal-dev` extends [Kamal](https://github.com/basecamp/kamal) to deploy and manage development container workspaces to cloud infrastructure. Deploy multiple parallel development environments for AI-assisted development, remote pair programming, or horizontal scaling of development tasks.
 
 ## Features
 
@@ -180,7 +180,7 @@ naming:
 
 ### Devcontainer.json Support
 
-Kamal::Dev parses VS Code [devcontainer.json](https://containers.dev/) specifications and generates Docker run commands automatically:
+`kamal-dev` parses VS Code [devcontainer.json](https://containers.dev/) specifications and generates Docker run commands automatically:
 
 **Supported properties:**
 - `image` - Base Docker image
@@ -210,7 +210,7 @@ Kamal::Dev parses VS Code [devcontainer.json](https://containers.dev/) specifica
 
 ## Docker Compose Support
 
-Kamal::Dev supports deploying complex development stacks using Docker Compose, enabling multi-service deployments (app + database + cache + workers) with custom Dockerfiles.
+`kamal-dev` supports deploying complex development stacks using Docker Compose, enabling multi-service deployments (app + database + cache + workers) with custom Dockerfiles.
 
 ### Registry Configuration
 
@@ -881,7 +881,7 @@ deployments:
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/ljuti/kamal-dev.
+Bug reports and pull requests are welcome on GitHub at https://github.com/hyperengineering/kamal-dev.
 
 **Before submitting a PR:**
 1. Run full test suite: `bundle exec rake`
