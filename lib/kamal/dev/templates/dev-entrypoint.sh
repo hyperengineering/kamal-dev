@@ -14,8 +14,8 @@ if [ -n "$KAMAL_DEV_GIT_REPO" ]; then
     mkdir -p ~/.ssh
     chmod 700 ~/.ssh
 
-    # Write SSH key to file
-    echo "$KAMAL_DEV_SSH_KEY" > ~/.ssh/id_rsa
+    # Write SSH key to file (use printf to preserve newlines)
+    printf '%s\n' "$KAMAL_DEV_SSH_KEY" > ~/.ssh/id_rsa
     chmod 600 ~/.ssh/id_rsa
 
     # Configure SSH to skip host key verification (for automated deployments)
