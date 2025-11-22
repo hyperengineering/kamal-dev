@@ -200,6 +200,11 @@ module Kamal
         service_config["environment"]["KAMAL_DEV_GIT_REPO"] = config.git_repository
         service_config["environment"]["KAMAL_DEV_GIT_BRANCH"] = config.git_branch
         service_config["environment"]["KAMAL_DEV_WORKSPACE_FOLDER"] = config.git_workspace_folder
+
+        # Inject SSH key if configured (for private repositories)
+        if config.git_ssh_key
+          service_config["environment"]["KAMAL_DEV_SSH_KEY"] = config.git_ssh_key
+        end
       end
 
       # Load and parse compose YAML file

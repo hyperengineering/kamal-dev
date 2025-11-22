@@ -66,12 +66,14 @@ ssh:
   key_path: ~/.ssh/id_rsa.pub  # SSH public key for VM access (default: ~/.ssh/id_rsa.pub)
 
 # Git clone configuration (for DevPod-style remote development)
-# When configured, code is cloned from GitHub on deployment
+# When configured, code is cloned from repository on deployment
 # Local devcontainer usage (VS Code) is unaffected - uses mounted code
 git:
-  repository: https://github.com/yourorg/yourrepo.git  # Git repository URL
+  repository: git@github.com:yourorg/yourrepo.git      # Git repository URL (SSH format for private repos)
   branch: main                                         # Branch to checkout (default: main)
   workspace_folder: /workspaces/myapp                  # Where to clone code (should match devcontainer workspaceFolder)
+  ssh_key: KAMAL_DEV_SSH_KEY                           # Environment variable name containing SSH private key (for private repos)
+                                                       # Add to .kamal/secrets: export KAMAL_DEV_SSH_KEY="$(cat ~/.ssh/id_rsa)"
 
 # Default resource limits for containers
 defaults:

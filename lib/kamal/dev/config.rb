@@ -143,6 +143,21 @@ module Kamal
         git["workspace_folder"] || "/workspaces/#{service}"
       end
 
+      # SSH private key for git clone (environment variable name)
+      #
+      # @return [String, nil] Environment variable name containing SSH private key
+      def git_ssh_key_env
+        git["ssh_key"]
+      end
+
+      # SSH private key value loaded from environment
+      #
+      # @return [String, nil] SSH private key content from ENV
+      def git_ssh_key
+        return nil unless git_ssh_key_env
+        ENV[git_ssh_key_env]
+      end
+
       # Check if git clone is configured for remote deployments
       #
       # @return [Boolean] true if git repository is configured
